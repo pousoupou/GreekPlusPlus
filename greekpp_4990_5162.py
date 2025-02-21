@@ -32,7 +32,7 @@ def categorize(char):
     
 ### ============================================
 
-## ==== Global Definitions ====
+### ============= Global Definitions =============
 line_number = 0
 
 state = "start"
@@ -70,7 +70,7 @@ class Token:
     def __str__(self):
         return self.recognized_string + "\t family: " + self.family + "\t line: " + str(self.line_number + 1)
 
-## ============================
+### ==============================================
 
 ### ============= Lexer =============
 class Lexer:
@@ -183,7 +183,6 @@ class Lexer:
                 current_string += char
                 self.line_index += 1
                 
-
                 family = "arithmOperator"
                 break
 
