@@ -305,6 +305,8 @@ class Parser:
         if token.family == "comment":
             token = self.lexer.nextToken()
 
+        #TODO: dont know if this actually belongs here
+
         #     while token.family == "comment" and token.family != "EOF":
         #         token = self.lexer.nextToken()
 
@@ -384,6 +386,9 @@ class Parser:
 
     def sequence(self):
         global token
+
+        #TODO: implement
+        # https://github.com/DionysiosC/uni_projects/blob/main/python-like%20language%20compiler/cpy_compiler.py#L563
 
 ### ==================================
 
