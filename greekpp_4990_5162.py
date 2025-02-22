@@ -277,18 +277,131 @@ class Lexer:
     
 ### =================================
 
+### ============= Parser =============
+class Parser:
+    def __init__(self, lexer):
+        self.lexer = lexer
+
+    def error(self, case):
+        print("Parser error in line: " + str(token.line_number + 1))
+
+        if case == "program":
+            print("\t'πρόγραμμα' expected")
+        elif case == "name":
+            print("\tProgram name expected")
+        elif case == "start":
+            print("\t'αρχή_προγράμματος' expected")
+        elif case == "end":
+            print("\t'τελός_προγράμματος' expected")
+        elif case == "varDec":
+            print("\tVariable name expected")
+
+        exit()
+
+    def get_token(self):
+        global token
+        token = self.lexer.nextToken()
+
+        if token.family == "comment":
+            token = self.lexer.nextToken()
+
+        #     while token.family == "comment" and token.family != "EOF":
+        #         token = self.lexer.nextToken()
+
+            # token = self.lexer.nextToken() #get the next token after the comment one
+
+        return token
+
+    def syntax_analyzer(self):
+        print("Syntax analyzer started")
+        global token
+        token = self.get_token()
+        self.program()
+        print("Program compiled successfully")
+
+    def program(self):
+        global token
+        
+        if token.recognized_string == "πρόγραμμα":
+            token = self.get_token()
+
+            if token.family == "id":
+                token = self.get_token()
+                self.program_block()
+            else:
+                self.error("name")
+
+        else:
+            self.error("program")
+
+    def program_block(self):
+        global token
+
+        self.declarations()
+        # self.subprograms()
+
+        if token.recognized_string == "αρχή_προγράμματος":
+            token = self.get_token()
+
+            self.sequence()
+        else:
+            self.error("start")
+
+        if token.recognized_string == "τέλος_προγράμματος":
+            exit()
+        else:
+            self.error("end")
+
+    def declarations(self):
+        global token
+
+        if token.recognized_string == "δήλωση":
+            token = self.get_token()
+
+            self.varlist()
+
+
+    def varlist(self):
+        global token
+        
+        if token.family == "id":
+            while token.family == "id":
+                token = self.get_token()
+
+                if token.recognized_string == ",":
+                    token = self.get_token()
+
+                    if token.family == "id":
+                        token = self.get_token()
+                    else:
+                        self.error("varDec")
+
+                else:
+                    break
+            
+        else:
+            self.error("varDec")
+
+    def sequence(self):
+        global token
+
+### ==================================
+
 def main():
     lexer = Lexer(source_file)
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
-    lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+
+    parser = Parser(lexer)
+    parser.syntax_analyzer()
 
 main()
