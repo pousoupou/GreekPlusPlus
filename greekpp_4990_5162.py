@@ -1,5 +1,4 @@
 import sys
-import string
 
 ### ============= Helper Functions =============
 def categorize(char):
@@ -19,7 +18,7 @@ def categorize(char):
         return "delimiter"
     elif char == '(' or char == ')' or char == '[' or char == ']':
         return "group"
-    elif char == '{' or char == '}':
+    elif char == '{':
         return "comment"
     elif char == '%':
         return "pointer"
@@ -33,6 +32,8 @@ def categorize(char):
 ### ============================================
 
 ### ============= Global Definitions =============
+source_file = sys.argv[1]
+
 line_number = 0
 
 state = "start"
@@ -91,13 +92,15 @@ class Lexer:
         # print(self.program_lines)
         fd.close()
 
-    def __error(self, case):
+    def error(self, case):
         print("Lexer error in line: " + str(line_number))
 
         if case == "number":
             print("\tIllegal number constant. Can not contain non-numerical values")
+        elif case == "numberRange":
+            print("\tIllegal number constant. Out of range (-32767 to 32767)")
         elif case == "limits":
-            print("\tIllegal length of variable name")
+            print("\tIllegal length of variable name. Must be between 1 and 30 characters")
         elif case == "EOF":
             print("\tEOF reached. Comments are opened but never closed")
         elif case == "unknown":
@@ -142,7 +145,7 @@ class Lexer:
                     self.line_index += 1
 
                     if var_name_len < 0:
-                        self.__error("limits")
+                        self.error("limits")
                     if self.line_index >= len(current_line):
                         break
 
@@ -162,12 +165,15 @@ class Lexer:
                     self.line_index += 1
 
                     if category == "alpha":
-                        self.__error("number")
+                        self.error("number")
                     if self.line_index >= len(current_line):
                         break
 
                     char = current_line[self.line_index]
                     category = categorize(char)
+
+                if int(current_string) < -32767 or int(current_string) > 32767:
+                    self.error("numberRange")
 
                 family = "number"
                 break
@@ -211,7 +217,7 @@ class Lexer:
                     family = "assignOperator"
                     break
                 else:
-                    self.__error("assign")
+                    self.error("assign")
             
             elif category == "group":
                 current_string += char
@@ -221,24 +227,30 @@ class Lexer:
                 break
 
             elif category == "comment":
-                if char == '{':
-                    while not char == "}":
-                        self.line_index += 1
-                        char = current_line[self.line_index]
+                com_open_line = line_number + 1
+                com_open = True
 
-                        if char == '\n':
-                            line_number += 1
-                            self.line_index = 0
+                while char != "}" and line_number < len(self.program_lines)-1:
+                    self.line_index += 1
+                    if self.line_index >= len(current_line):
+                        line_number += 1
+                        self.line_index = 0
 
-                            char = current_line[self.line_index]
-                        elif char == '':
-                            self.__error("EOF")
-                            break
-                    
-                    break
+                        current_line = [line.rstrip() for line in self.program_lines[line_number]]
 
+                    char = current_line[self.line_index]
+
+                    if char == '}':
+                        com_open = False
+                        break
+                
+                if com_open:
+                    line_number = com_open_line
+                    self.error("EOF")
                 else:
-                    self.__error("unknown")
+                    self.line_index += 1
+
+                    family = "comment"
                     break
 
             elif category == "pointer":
@@ -248,19 +260,25 @@ class Lexer:
                 family = "pointer"
                 break
 
+            elif category == "EOF":
+                current_string = "EOF"
+                family = "EOF"
+                break
+
             elif category == "character error":
-                self.__error("unknown")
+                self.error("unknown")
             else:
-                self.__error("unknown")
+                self.error("unknown")
 
         next_token = Token(current_string, family, line_number)
+        # DEBUG
         print(next_token)
         return next_token
     
 ### =================================
 
 def main():
-    lexer = Lexer(sys.argv[1])
+    lexer = Lexer(source_file)
     lexer.nextToken()
     lexer.nextToken()
     lexer.nextToken()
