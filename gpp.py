@@ -305,7 +305,9 @@ class Parser:
             print("\t'αρχή_προγράμματος' expected")
         elif case == "end":
             print("\t'τελός_προγράμματος' expected")
-        elif case == "varDec":
+        elif case == "varDecl":
+            print("\t'δήλωση' expected")
+        elif case == "varName":
             print("\tVariable name expected")
         elif case == "statement":
             print("\tStatement expected")
@@ -426,7 +428,7 @@ class Parser:
             self.varlist()
         
         elif token.recognized_string not in keywords:
-            self.error("varDec")
+            self.error("varDecl")
 
 
     # varlist() updates the token at the end
@@ -445,13 +447,13 @@ class Parser:
                     if token.family == "id":
                         token = self.get_token()
                     else:
-                        self.error("varDec")
+                        self.error("varName")
 
                 else:
                     break
             
         else:
-            self.error("varDec")
+            self.error("varName")
 
     # subprograms() updates the token at the end
     # so there is no need to call get_token()
@@ -583,7 +585,7 @@ class Parser:
             if token.family == "id":
                 self.varlist()
             else:
-                self.error("varDec")
+                self.error("varName")
         
         elif token.recognized_string == "έξοδος":
             self.funcoutput()
@@ -603,7 +605,7 @@ class Parser:
             if token.family == "id":
                 self.varlist()
             else:
-                self.error("varDec")
+                self.error("varName")
         
         elif token.recognized_string == "δήλωση":
             self.declarations()
@@ -771,7 +773,7 @@ class Parser:
             else:
                 self.error("assign")
         else:
-            self.error("varDec")
+            self.error("varName")
 
     def step(self):
         global token
@@ -788,7 +790,7 @@ class Parser:
         if token.family == "id":
             token = self.get_token()
         else:
-            self.error("varDec")
+            self.error("varName")
 
     def print_stat(self):
         global token
@@ -850,7 +852,7 @@ class Parser:
             token = self.get_token()
 
             if token.family != "id":
-                self.error("varDec")
+                self.error("varName")
 
     # condition() updates the token at the end
     # like sequence() and actualparlist()
