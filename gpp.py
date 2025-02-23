@@ -6,8 +6,10 @@ def categorize(char):
         return "alpha"
     elif char.isnumeric():
         return "digit"
-    elif char == '+' or char == '-' or char == '*' or char == '/':
-        return "arithmOp"
+    elif char == '+' or char == '-':
+        return "addOp"
+    elif char == '*' or char == '/':
+        return "mulOp"
     elif char == '<' or char == '>':
         return "relOp"
     elif char == ':':
@@ -185,11 +187,18 @@ class Lexer:
                 family = "delimiter"
                 break
 
-            elif category == "arithmOp":
+            elif category == "addOp":
                 current_string += char
                 self.line_index += 1
                 
-                family = "arithmOperator"
+                family = "addOperator"
+                break
+            
+            elif category == "mulOp":
+                current_string += char
+                self.line_index += 1
+                
+                family = "mulOperator"
                 break
 
             elif category == "relOp":
@@ -271,8 +280,11 @@ class Lexer:
                 self.error("unknown")
 
         next_token = Token(current_string, family, line_number)
+
+        #TODO: Remove this
         # DEBUG
         print(next_token)
+        
         return next_token
     
 ### =================================
@@ -295,6 +307,56 @@ class Parser:
             print("\t'τελός_προγράμματος' expected")
         elif case == "varDec":
             print("\tVariable name expected")
+        elif case == "statement":
+            print("\tStatement expected")
+        elif case == "assign":
+            print("\tAssignment operator ':=' expected after variable name")
+        elif case == "if-then":
+            print("\t'τότε' expected after 'εάν'")
+        elif case == "if-end":
+            print("\t'εάν' block is never closed")
+        elif case == "while-end":
+            print("\t'όσο' block is never closed")
+        elif case == "do-end":
+            print("\t'επανέλαβε' ending condition is not found")
+        elif case == "for-end":
+            print("\t'για' block is never closed")
+        elif case == "for-do":
+            print("\t'επανέλαβε' expected after 'για'")
+        elif case == "for-range":
+            print("\t'έως' expected after 'για'")
+        elif case == "funDec":
+            print("\tFunction name expected")
+        elif case == "sqBracketsClose":
+            print("\t'[' is not closed")
+        elif case == "sqBracketsOpen":
+            print("\t'[' expected")
+        elif case == "bracketsOpen":
+            print("\t'(' expected after function or procedure name")
+        elif case == "bracketsClose":
+            print("\t'(' is not closed")
+        elif case == "optionalSign":
+            print("\t'+' or '-' or expression expected")
+        elif case == "relOp":
+            print("\t'<', '>', '<=', '>=', '=' or '<>' operator expected")
+        elif case == "parList":
+            print("\tOptional parameter list expected")
+        elif case == "func-end":
+            print("\tFunction block is never closed")
+        elif case == "func-start":
+            print("\tFunction block is never opened")
+        elif case == "func-interface":
+            print("\t'διαπροσωπεία' expected")
+        elif case == "proc-end":
+            print("\tProcedure block is never closed")
+        elif case == "proc-start":
+            print("\tProcedure block is never opened")
+        elif case == "proc-interface":
+            print("\t'διαπροσωπεία' expected")
+        elif case == "func-input":
+            print("\tInput parameter list, or Output parameter list, or variable declarationexpected")            
+        elif case == "func-output":
+            print("\tOutput parameter list, or variable declarationexpected")
 
         exit()
 
@@ -340,7 +402,8 @@ class Parser:
         global token
 
         self.declarations()
-        # self.subprograms()
+        token = self.get_token()
+        self.subprograms()
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -361,8 +424,14 @@ class Parser:
             token = self.get_token()
 
             self.varlist()
+        
+        elif token.recognized_string not in keywords:
+            self.error("varDec")
 
 
+    # varlist() updates the token at the end
+    # so there is no need to call get_token()
+    # after varlist() is called in the code
     def varlist(self):
         global token
         
@@ -384,12 +453,529 @@ class Parser:
         else:
             self.error("varDec")
 
+    # subprograms() updates the token at the end
+    # so there is no need to call get_token()
+    # after subprograms() is called in the code
+    def subprograms(self):
+        global token
+
+        while token.recognized_string == "συνάρτηση" or token.recognized_string == "διαδικασία":
+            if token.recognized_string == "συνάρτηση":
+                token = self.get_token()
+
+                self.func()
+
+            elif token.recognized_string == "διαδικασία":
+                token = self.get_token()
+
+                self.proc()
+
+            token = self.get_token()
+
+    def func(self):
+        global token
+
+        if token.family == "id":
+            token = self.get_token()
+
+            if token.recognized_string == "(":
+                token = self.get_token()
+
+                self.formalparlist()
+
+                if token.recognized_string == ")":
+                    token = self.get_token()
+
+                    self.funcblock()
+
+                else:
+                    self.error("bracketsClose")
+            else:
+                self.error("bracketsOpen")
+        else:
+            self.error("funDec")
+
+    def proc(self):
+        global token
+
+        if token.family == "id":
+            token = self.get_token()
+
+            if token.recognized_string == "(":
+                token = self.get_token()
+
+                self.formalparlist()
+
+                if token.recognized_string == ")":
+                    token = self.get_token()
+
+                    self.procblock()
+                else:
+                    self.error("bracketsClose")
+            else:
+                self.error("bracketsOpen")
+        else:
+            self.error("funDec")
+
+    def formalparlist(self):
+        global token
+
+        if token.family == "id":
+            self.varlist()
+        elif token.recognized_string != ")":
+            self.error("parList")
+
+    def funcblock(self):
+        global token
+
+        if token.recognized_string == "διαπροσωπεία":
+            token = self.get_token()
+
+            self.funcinput()
+            self.funcoutput()
+            self.declarations()
+
+            token = self.get_token()
+
+            if token.recognized_string == "αρχή_συνάρτησης":
+                token = self.get_token()
+
+                self.sequence()
+
+                if token.recognized_string != "τέλος_συνάρτησης":
+                    self.error("func-end")
+            
+            else:
+                self.error("func-start")
+        else:
+            self.error("func-interface")
+
+    def procblock(self):
+        global token
+
+        if token.recognized_string == "διαπροσωπεία":
+            token = self.get_token()
+
+            self.funcinput()
+            self.funcoutput()
+            self.declarations()
+
+            token = self.get_token()
+
+            if token.recognized_string == "αρχή_διαδικασίας":
+                token = self.get_token()
+
+                self.sequence()
+
+                if token.recognized_string != "τέλος_διαδικασίας":
+                    self.error("proc-end")
+            else:
+                self.error("proc-start")
+        else:
+            self.error("proc-interface")
+
+    def funcinput(self):
+        global token
+
+        if token.recognized_string == "είσοδος":
+            token = self.get_token()
+
+            if token.family == "id":
+                self.varlist()
+            else:
+                self.error("varDec")
+        
+        elif token.recognized_string == "έξοδος":
+            self.funcoutput()
+
+        elif token.recognized_string == "δήλωση":
+            self.declarations()
+        
+        else:
+            self.error("func-input")
+
+    def funcoutput(self):
+        global token
+
+        if token.recognized_string == "έξοδος":
+            token = self.get_token()
+
+            if token.family == "id":
+                self.varlist()
+            else:
+                self.error("varDec")
+        
+        elif token.recognized_string == "δήλωση":
+            self.declarations()
+        
+        else:
+            self.error("func-output")
+
+    # sequence() updates the token at the end
+    # so there is no need to call get_token()
+    # after sequence() is called in the code
     def sequence(self):
         global token
 
-        #TODO: implement
-        # https://github.com/DionysiosC/uni_projects/blob/main/python-like%20language%20compiler/cpy_compiler.py#L563
+        self.statement()
 
+        token = self.get_token()
+
+        while token.recognized_string == ";":
+            token = self.get_token()
+
+            self.statement()
+
+            token = self.get_token()
+        
+    def statement(self):
+        global token
+
+        if token.family == "id":
+            self.assignement_stat()
+
+        elif token.recognized_string == "εάν":
+            self.if_stat()
+
+        elif token.recognized_string == "όσο":
+            self.while_stat()
+
+        elif token.recognized_string == "επανέλαβε":
+            self.do_stat()
+        
+        elif token.recognized_string == "για":
+            self.for_stat()
+
+        elif token.recognized_string == "διάβασε":
+            self.input_stat()
+
+        elif token.recognized_string == "γράψε":
+            self.print_stat()
+
+        elif token.recognized_string == "εκτέλεσε":
+            self.call_stat()
+
+        else:
+            self.error("statement")
+
+    def assignement_stat(self):
+        global token
+        token = self.get_token()
+
+        if token.recognized_string == ":=":
+            token = self.get_token()
+
+            self.expression()
+        else:
+            self.error("assign")
+
+    def if_stat(self):
+        global token
+        token = self.get_token()
+
+        self.condition()
+
+        token = self.get_token()
+
+        if token.recognized_string == "τότε":
+            token = self.get_token()
+
+            self.sequence()
+            self.elsepart()
+
+            if token.recognized_string != "εάν_τέλος":
+                self.error("if-end")
+            else:
+                token = self.get_token()
+        else:
+            self.error("if-then")
+
+    def elsepart(self):
+        global token
+        token = self.get_token()
+
+        if token.recognized_string == "αλλιώς":
+            token = self.get_token()
+
+            self.sequence()
+
+    def while_stat(self):
+        global token
+        token = self.get_token()
+
+        self.condition()
+
+        token = self.get_token()
+
+        if token.recognized_string == "επανέλαβε":
+            token = self.get_token()
+
+            self.sequence()
+
+            if token.recognized_string != "οσο_τέλος":
+                self.error("while-end")
+
+    def do_stat(self):
+        global token
+        token = self.get_token()
+
+        self.sequence()
+
+        if token.recognized_string == "μέχρι":
+            token = self.get_token()
+
+            self.condition()
+
+            token = self.get_token()
+
+        else:
+            self.error("do-end")
+
+    def for_stat(self):
+        global token
+        token = self.get_token()
+
+        if token.family == "id":
+            token = self.get_token()
+
+            if token.recognized_string == ":=":
+                token = self.get_token()
+
+                self.expression()
+
+                token = self.get_token()
+
+                if token.recognized_string == "έως":
+                    token = self.get_token()
+
+                    self.expression()
+
+                    token = self.get_token()
+
+                    self.step()
+
+                    token = self.get_token()
+
+                    if token.recognized_string == "επανέλαβε":
+                        token = self.get_token()
+
+                        self.sequence()
+
+                        if token.recognized_string != "για_τέλος":
+                            self.error("for-end")
+
+                    else:
+                        self.error("for-do")
+                else:
+                    self.error("for-range")
+            else:
+                self.error("assign")
+        else:
+            self.error("varDec")
+
+    def step(self):
+        global token
+
+        if token.recognized_string == "με_βήμα":
+            token = self.get_token()
+
+            self.expression()
+
+    def input_stat(self):
+        global token
+        token = self.get_token()
+
+        if token.family == "id":
+            token = self.get_token()
+        else:
+            self.error("varDec")
+
+    def print_stat(self):
+        global token
+        token = self.get_token()
+
+        self.expression()
+
+    def call_stat(self):
+        global token
+        token = self.get_token()
+
+        if token.family == "id":
+            token = self.get_token()
+
+            self.idtail()
+        else:
+            self.error("funDec")
+
+    def idtail(self):
+        global token
+
+        self.actualpars()
+
+    def actualpars(self):
+        global token
+
+        if token.recognized_string == "(":
+            token = self.get_token()
+
+            self.actualparlist()
+
+            if token.recognized_string != ")":
+                self.error("parEnd")
+            
+
+    # just like sequence(), actualparlist() updates
+    # the token at the end so there is no need to 
+    # call get_token() after actualparlist() is called in the code
+    def actualparlist(self):
+        global token
+
+        self.actualparitem()
+
+        token = self.get_token()
+
+        while token.recognized_string == ",":
+            token = self.get_token()
+
+            self.actualparitem()
+
+            token = self.get_token()
+
+    def actualparitem(self):
+        global token
+
+        if token.recognized_string != "%":
+            self.expression()
+        else:
+            token = self.get_token()
+
+            if token.family != "id":
+                self.error("varDec")
+
+    # condition() updates the token at the end
+    # like sequence() and actualparlist()
+    def condition(self):
+        global token
+
+        self.boolterm()
+
+        token = self.get_token()
+
+        while token.recognized_string == "ή":
+            token = self.get_token()
+
+            self.boolterm()
+
+            token = self.get_token()
+
+    # boolterm() also updates the token at the end
+    def boolterm(self):
+        global token
+
+        self.boolfactor()
+
+        token = self.get_token()
+
+        while token.recognized_string == "και":
+            token = self.get_token()
+
+            self.boolfactor()
+
+            token = self.get_token()
+
+    def boolfactor(self):
+        global token
+
+        if token.recognized_string == "όχι":
+            token = self.get_token()
+
+            if token.recognized_string == "[":
+                token = self.get_token()
+
+                self.condition()
+
+                if token.recognized_string != "]":
+                    self.error("sqBracketsClose")
+            else:
+                self.error("sqBracketsOpen")
+        
+        elif token.recognized_string == "[":
+            token = self.get_token()
+
+            self.condition()
+
+            if token.recognized_string != "]":
+                self.error("sqBracketsClose")
+
+        else:
+            self.expression()
+            self.relational_oper()
+            token = self.get_token()
+            self.expression()
+
+    # expression() also updates the token at the end
+    def expression(self):
+        global token
+
+        self.optional_sign()
+        self.term()
+
+        token = self.get_token()
+
+        while token.recognized_string == "+" or token.recognized_string == "-":
+            token = self.get_token()
+
+            self.term()
+
+            token = self.get_token()
+
+    def optional_sign(self):
+        global token
+
+        if token.family != "addOperator" and token.family != "number" and token.recognized_string != "(" and token.family != "id":
+            self.error("optionalSign")
+
+
+    # term() also updates the token at the end
+    def term(self):
+        global token
+
+        self.factor()
+
+        token = self.get_token()
+
+        while token.recognized_string == "*" or token.recognized_string == "/":
+            token = self.get_token()
+
+            self.factor()
+
+            token = self.get_token()
+
+    def factor(self):
+        global token
+
+        if token.family == "number":
+            pass
+
+        elif token.recognized_string == "(":
+            token = self.get_token()
+
+            self.expression()
+
+            if token.recognized_string != ")":
+                self.error("bracketsClose")
+
+        elif token.family == "id":
+            token = self.get_token()
+
+            self.idtail()
+
+    def relational_oper(self):
+        global token
+
+        if token.family != "relationalOperator":
+            self.error("relOp")
+        
 ### ==================================
 
 def main():
