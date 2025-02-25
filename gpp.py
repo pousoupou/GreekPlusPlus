@@ -43,7 +43,7 @@ state = "start"
 keywords = [
     "πρόγραμμα",    "δήλωση",       "εάν",
     "τότε",         "αλλιώς",       "εάν_τέλος",
-    "επανέλαβε",    "μέχρι",        "όσο",
+    "επανάλαβε",    "μέχρι",        "όσο",
     "όσο_τέλος",    "για",          "έως",
     "με_βήμα",      "για_τέλος",    "διάβασε",
     "γράψε",        "συνάρτηση",    "διαδικασία",
@@ -90,6 +90,7 @@ class Lexer:
         
         fd = open(file_path, "r", encoding="utf-8")
         self.program_lines = [line.rstrip() for line in fd]
+        #TODO: remove this
         # DEBUG
         # print(self.program_lines)
         fd.close()
@@ -210,6 +211,7 @@ class Lexer:
 
                 if category == "equal":
                     current_string += char
+                    self.line_index += 1
                     
                 family = "relationalOperator"
                 break
@@ -223,6 +225,7 @@ class Lexer:
 
                 if category == "equal":
                     current_string += char
+                    self.line_index += 1
                     family = "assignOperator"
                     break
                 else:
@@ -295,7 +298,7 @@ class Parser:
         self.lexer = lexer
 
     def error(self, case):
-        print("Parser error in line: " + str(token.line_number + 1))
+        print("Parser error in line: " + str(token.line_number + 1) + " " + case)
 
         if case == "program":
             print("\t'πρόγραμμα' expected")
@@ -320,11 +323,11 @@ class Parser:
         elif case == "while-end":
             print("\t'όσο' block is never closed")
         elif case == "do-end":
-            print("\t'επανέλαβε' ending condition is not found")
+            print("\t'επανάλαβε' ending condition is not found")
         elif case == "for-end":
             print("\t'για' block is never closed")
         elif case == "for-do":
-            print("\t'επανέλαβε' expected after 'για'")
+            print("\t'επανάλαβε' expected after 'για'")
         elif case == "for-range":
             print("\t'έως' expected after 'για'")
         elif case == "funDec":
@@ -358,7 +361,9 @@ class Parser:
         elif case == "func-input":
             print("\tInput parameter list, or Output parameter list, or variable declarationexpected")            
         elif case == "func-output":
-            print("\tOutput parameter list, or variable declarationexpected")
+            print("\tOutput parameter list, or variable declaration expected")
+        elif case == "parEnd":
+            print("\t'(' is not closed after function or procedure name")
 
         exit()
 
@@ -368,13 +373,6 @@ class Parser:
 
         if token.family == "comment":
             token = self.lexer.nextToken()
-
-        #TODO: dont know if this actually belongs here
-
-        #     while token.family == "comment" and token.family != "EOF":
-        #         token = self.lexer.nextToken()
-
-            # token = self.lexer.nextToken() #get the next token after the comment one
 
         return token
 
@@ -404,7 +402,6 @@ class Parser:
         global token
 
         self.declarations()
-        token = self.get_token()
         self.subprograms()
 
         if token.recognized_string == "αρχή_προγράμματος":
@@ -423,9 +420,10 @@ class Parser:
         global token
 
         if token.recognized_string == "δήλωση":
-            token = self.get_token()
+            while token.recognized_string == "δήλωση":
+                token = self.get_token()
 
-            self.varlist()
+                self.varlist()
         
         elif token.recognized_string not in keywords:
             self.error("varDecl")
@@ -537,8 +535,6 @@ class Parser:
             self.funcoutput()
             self.declarations()
 
-            token = self.get_token()
-
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
 
@@ -559,10 +555,10 @@ class Parser:
             token = self.get_token()
 
             self.funcinput()
-            self.funcoutput()
+            # self.funcoutput()
             self.declarations()
 
-            token = self.get_token()
+            # token = self.get_token()
 
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
@@ -619,16 +615,21 @@ class Parser:
     def sequence(self):
         global token
 
+        print("into statement with token " + token.recognized_string)
         self.statement()
+        print("outo statement with token " + token.recognized_string)
 
-        token = self.get_token()
+        #TODO: maybe delete this
+        # token = self.get_token()
 
         while token.recognized_string == ";":
             token = self.get_token()
 
+            print("into statement with token " + token.recognized_string)
             self.statement()
+            print("outo statement with token " + token.recognized_string)
 
-            token = self.get_token()
+            # token = self.get_token()
         
     def statement(self):
         global token
@@ -642,7 +643,7 @@ class Parser:
         elif token.recognized_string == "όσο":
             self.while_stat()
 
-        elif token.recognized_string == "επανέλαβε":
+        elif token.recognized_string == "επανάλαβε":
             self.do_stat()
         
         elif token.recognized_string == "για":
@@ -662,6 +663,7 @@ class Parser:
 
     def assignement_stat(self):
         global token
+
         token = self.get_token()
 
         if token.recognized_string == ":=":
@@ -677,7 +679,7 @@ class Parser:
 
         self.condition()
 
-        token = self.get_token()
+        # token = self.get_token()
 
         if token.recognized_string == "τότε":
             token = self.get_token()
@@ -709,7 +711,7 @@ class Parser:
 
         token = self.get_token()
 
-        if token.recognized_string == "επανέλαβε":
+        if token.recognized_string == "επανάλαβε":
             token = self.get_token()
 
             self.sequence()
@@ -758,7 +760,7 @@ class Parser:
 
                     token = self.get_token()
 
-                    if token.recognized_string == "επανέλαβε":
+                    if token.recognized_string == "επανάλαβε":
                         token = self.get_token()
 
                         self.sequence()
@@ -824,6 +826,8 @@ class Parser:
 
             if token.recognized_string != ")":
                 self.error("parEnd")
+            else:
+                token = self.get_token()
             
 
     # just like sequence(), actualparlist() updates
@@ -834,14 +838,10 @@ class Parser:
 
         self.actualparitem()
 
-        token = self.get_token()
-
         while token.recognized_string == ",":
             token = self.get_token()
 
             self.actualparitem()
-
-            token = self.get_token()
 
     def actualparitem(self):
         global token
@@ -853,6 +853,8 @@ class Parser:
 
             if token.family != "id":
                 self.error("varName")
+            else:
+                token = self.get_token()
 
     # condition() updates the token at the end
     # like sequence() and actualparlist()
@@ -919,23 +921,23 @@ class Parser:
     def expression(self):
         global token
 
-        self.optional_sign()
+        # self.optional_sign()
         self.term()
 
-        token = self.get_token()
-
-        while token.recognized_string == "+" or token.recognized_string == "-":
+        while token.family == "addOperator":
             token = self.get_token()
 
             self.term()
 
-            token = self.get_token()
+            # token = self.get_token()
 
     def optional_sign(self):
         global token
 
         if token.family != "addOperator" and token.family != "number" and token.recognized_string != "(" and token.family != "id":
             self.error("optionalSign")
+        else:
+            token = self.get_token()
 
 
     # term() also updates the token at the end
@@ -944,20 +946,20 @@ class Parser:
 
         self.factor()
 
-        token = self.get_token()
+        # token = self.get_token()
 
-        while token.recognized_string == "*" or token.recognized_string == "/":
+        while token.family == "mulOperator":
             token = self.get_token()
 
             self.factor()
 
-            token = self.get_token()
+            # token = self.get_token()
 
     def factor(self):
         global token
 
         if token.family == "number":
-            pass
+            token = self.get_token()
 
         elif token.recognized_string == "(":
             token = self.get_token()
@@ -966,6 +968,8 @@ class Parser:
 
             if token.recognized_string != ")":
                 self.error("bracketsClose")
+            else:
+                token = self.get_token()
 
         elif token.family == "id":
             token = self.get_token()
