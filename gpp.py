@@ -1,3 +1,5 @@
+from timeit import default_timer as timer
+
 import sys
 
 ### ============= Helper Functions =============
@@ -378,7 +380,6 @@ class Parser:
         return token
 
     def syntax_analyzer(self):
-        print("Syntax analyzer started")
         global token
         token = self.get_token()
         self.program()
@@ -948,6 +949,7 @@ class Parser:
 ### ==================================
 
 def main():
+    start = timer()
     lexer = Lexer(source_file)
     # lexer.nextToken()
     # lexer.nextToken()
@@ -963,5 +965,8 @@ def main():
 
     parser = Parser(lexer)
     parser.syntax_analyzer()
+
+    end = timer()
+    print("Compiled successfuly in: {:.4f} seconds".format(end - start))
 
 main()
