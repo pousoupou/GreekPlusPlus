@@ -287,7 +287,7 @@ class Lexer:
 
         #TODO: Remove this
         # DEBUG
-        print(next_token)
+        # print(next_token)
         
         return next_token
     
@@ -532,6 +532,8 @@ class Parser:
             self.funcoutput()
             self.declarations()
 
+            self.subprograms()
+
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
 
@@ -552,10 +554,9 @@ class Parser:
             token = self.get_token()
 
             self.funcinput()
-            # self.funcoutput()
             self.declarations()
 
-            # token = self.get_token()
+            self.subprograms()
 
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
