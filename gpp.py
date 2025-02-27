@@ -92,9 +92,6 @@ class Lexer:
         
         fd = open(file_path, "r", encoding="utf-8")
         self.program_lines = [line.rstrip() for line in fd]
-        #TODO: remove this
-        # DEBUG
-        # print(self.program_lines)
         fd.close()
 
     def error(self, case):
@@ -367,6 +364,8 @@ class Parser:
             print("\tOutput parameter list, or variable declaration expected")
         elif case == "parEnd":
             print("\t'(' is not closed after function or procedure name")
+        elif case == "operator":
+            print("\tExpression or variable or constant expected after operator")
 
         exit()
 
@@ -895,6 +894,9 @@ class Parser:
         while token.family == "addOperator":
             token = self.get_token()
 
+            if token.family == "addOperator" or token.family == "mulOperator":
+                self.error("operator")
+
             self.term()
 
     def optional_sign(self):
@@ -914,6 +916,9 @@ class Parser:
 
         while token.family == "mulOperator":
             token = self.get_token()
+
+            if token.family == "addOperator" or token.family == "mulOperator":
+                self.error("operator")
 
             self.factor()
 
