@@ -586,9 +586,6 @@ class Parser:
 
         elif token.recognized_string == "δήλωση":
             self.declarations()
-        
-        # else:
-        #     self.error("func-input")
 
     def funcoutput(self):
         global token
@@ -603,9 +600,6 @@ class Parser:
         
         elif token.recognized_string == "δήλωση":
             self.declarations()
-        
-        # else:
-        #     self.error("func-output")
 
     # sequence() updates the token at the end
     # so there is no need to call get_token()
@@ -667,8 +661,6 @@ class Parser:
         token = self.get_token()
         
         self.condition()
-    
-        # token = self.get_token()
 
         if token.recognized_string == "τότε":
             token = self.get_token()
@@ -697,8 +689,6 @@ class Parser:
 
         self.condition()
 
-        # token = self.get_token()
-
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
 
@@ -719,8 +709,6 @@ class Parser:
             token = self.get_token()
 
             self.condition()
-
-            # token = self.get_token()
 
         else:
             self.error("do-end")
@@ -813,7 +801,6 @@ class Parser:
                 self.error("parEnd")
             else:
                 token = self.get_token()
-            
 
     # just like sequence(), actualparlist() updates
     # the token at the end so there is no need to 
@@ -848,14 +835,10 @@ class Parser:
 
         self.boolterm()
 
-        # token = self.get_token()
-
         while token.recognized_string == "ή":
             token = self.get_token()
 
             self.boolterm()
-
-            # token = self.get_token()
 
     # boolterm() also updates the token at the end
     def boolterm(self):
@@ -863,14 +846,10 @@ class Parser:
 
         self.boolfactor()
 
-        # token = self.get_token()
-
         while token.recognized_string == "και":
             token = self.get_token()
 
             self.boolfactor()
-
-            # token = self.get_token()
 
     def boolfactor(self):
         global token
@@ -917,8 +896,6 @@ class Parser:
 
             self.term()
 
-            # token = self.get_token()
-
     def optional_sign(self):
         global token
 
@@ -934,14 +911,10 @@ class Parser:
 
         self.factor()
 
-        # token = self.get_token()
-
         while token.family == "mulOperator":
             token = self.get_token()
 
             self.factor()
-
-            # token = self.get_token()
 
     def factor(self):
         global token
