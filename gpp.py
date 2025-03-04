@@ -106,7 +106,7 @@ class Lexer:
         elif case == "EOF":
             print("\tEOF reached. Comments are opened but never closed")
         elif case == "unknown":
-            print("\tUnknown character error")
+            print("\tUnknown character error [" + token.recognized_string + "]")
         elif case == "assign":
             print("\t'=' expected")
         
@@ -286,7 +286,7 @@ class Lexer:
 
         #TODO: Remove this
         # DEBUG
-        print(next_token)
+        # print(next_token)
         
         return next_token
     
