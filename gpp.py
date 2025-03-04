@@ -86,8 +86,8 @@ class Lexer:
         global line_number
         self.file_path = file_path
 
-        if not(file_path.endswith(".gpp")):
-            print("Filetype Error: Not a .gpp file")
+        if not(file_path.lower().endswith(".gr")):
+            print("Filetype Error: Not a .gr file")
             exit()
         
         fd = open(file_path, "r", encoding="utf-8")
@@ -286,7 +286,7 @@ class Lexer:
 
         #TODO: Remove this
         # DEBUG
-        # print(next_token)
+        print(next_token)
         
         return next_token
     
