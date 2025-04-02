@@ -984,19 +984,35 @@ class Parser:
         
 ### ==================================
 
+
+## ============= Quad =============
+class Quad:
+    def __init__(self, op, op1, op2, op3, label):
+        self.op = op
+        self.op1 = op1
+        self.op2 = op2
+        self.op3 = op3
+        self.label = label
+
+    def __str__(self):
+        return f"{self.op}, {self.op1}, {self.op2}, {self.op3}"
+
+## ============= QuadList =============
+class QuadList:
+    def __init__(self):
+        self.programList = []
+        self.quad_counter = 0
+
+    def __str__(self):
+        return "\n".join(f"{i}: {quad}" for i, quad in enumerate(self.programList))
+    
+    def genQuad(self, op, x, y, z):
+        self.programList.append(Quad(op, x, y, z))
+        self.quad_counter += 1
+
+
 def main():
     lexer = Lexer(source_file)
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
-    # lexer.nextToken()
 
     parser = Parser(lexer)
     parser.syntax_analyzer()
