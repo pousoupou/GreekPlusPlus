@@ -296,6 +296,9 @@ class Lexer:
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
+        self.quad_list = QuadList()
+        self.temp_counter = 1
+        self.label_counter = 1
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -402,6 +405,8 @@ class Parser:
     def program_block(self):
         global token
 
+        self.quad_list.genQuad("PROGRAM_START", "-", "-", "-") # Generate the start program quad
+
         self.declarations()
         self.subprograms()
 
@@ -415,14 +420,18 @@ class Parser:
         if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
 
+        self.quad_list.genQuad("PROGRAM_END", "-", "-", "-") # Generate the end program quad
+
+        print(self.quad_list)
+
     def declarations(self):
         global token
 
         if token.recognized_string == "δήλωση":
             while token.recognized_string == "δήλωση":
                 token = self.get_token()
-
-                self.varlist()
+            
+            self.varlist()
         
         elif token.recognized_string not in keywords:
             self.error("varDecl")
@@ -988,6 +997,12 @@ class QuadList:
         self.programList = []
         self.quad_counter = 1
 
+    def __str__(self):
+        quad_strings = []
+        for quad in self.programList:
+            quad_strings.append(f"{quad.label}: {quad.op} {quad.op1}, {quad.op2}, {quad.op3}")
+        return "\n".join(quad_strings)
+
     # Returns the next available quad number
     def nextQuad(self):
         return self.quad_counter
@@ -995,6 +1010,7 @@ class QuadList:
     # Generates a new quad and adds it to the program list
     def genQuad(self, op, op1, op2, op3):
         new_quad = Quad(
+            label = self.quad_counter,
             op = op,
             op1 = op1,
             op2 = op2,
@@ -1004,7 +1020,7 @@ class QuadList:
         self.programList.append(new_quad)
         self.quad_counter += 1
 
-        return (self.quad_counter - 1)
+        return new_quad.label
 
 
     # For each quad in list, we put label as op3
@@ -1013,9 +1029,10 @@ class QuadList:
     # 101: +, a, 1, a
     # 102: jump, _, _, 104
     # 103: +, a, 2, a
-    def backPatch(self, list, label):
-        for quad in list:
-            quad.op3 = label
+    def backPatch(self, quad_index_list, label):
+        for quad_index in quad_index_list:
+            self.programList[quad_index - 1].op3 = label
+
 
 ### ==================================
 
