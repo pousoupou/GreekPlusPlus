@@ -392,7 +392,7 @@ class Parser:
         
         if token.recognized_string == "πρόγραμμα":
             token = self.get_token()
-
+            
             if token.family == "id":
                 token = self.get_token()
                 self.program_block()
@@ -435,7 +435,6 @@ class Parser:
         
         elif token.recognized_string not in keywords:
             self.error("varDecl")
-
 
     # varlist() updates the token at the end
     # so there is no need to call get_token()
