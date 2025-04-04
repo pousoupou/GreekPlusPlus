@@ -954,6 +954,7 @@ class Parser:
 ### ==================================
 
 ### ============= Quad =============
+# Represents each quad, for example -> (1: + a b c)
 class Quad:
     def __init__(self, label, op, op1, op2, op3):
         self.label = label
@@ -963,9 +964,73 @@ class Quad:
         self.op3 = op3
 
     def __str__(self):
-        return "{self.label}: {self.op}, {self.op1}, {self.op2}, {self.op3}"
+        return f"{self.label}: {self.op}, {self.op1}, {self.op2}, {self.op3}"
 
 ### ==================================
+
+
+### ============= QuadPointer =============
+# Used for the label of the quad, for example -> (1)
+class QuadPointer:
+    def __init__(self, label):
+        self.label = label
+    
+    def __str__(self):
+        return f"{self.label}"
+
+### ==================================
+
+
+### ============= QuadList =============
+# Represents a list of quads an also holds the number of quads that have been created so far
+class QuadList:
+    def __init__(self):
+        self.programList = []
+        self.quad_counter = 1
+
+    # Returns the next available quad number
+    def nextQuad(self):
+        return self.quad_counter
+    
+    # Generates a new quad and adds it to the program list
+    def genQuad(self, op, op1, op2, op3):
+        new_quad = Quad(
+            op = op,
+            op1 = op1,
+            op2 = op2,
+            op3 = op3
+        )
+
+        self.programList.append(new_quad)
+        self.quad_counter += 1
+
+        return (self.quad_counter - 1)
+
+
+    # For each quad in list, we put label as op3
+    # For example -> If list hold the quads [100, 102] then the "output" will be:
+    # 100: jump, _, _, 104
+    # 101: +, a, 1, a
+    # 102: jump, _, _, 104
+    # 103: +, a, 2, a
+    def backPatch(self, list, label):
+        for quad in list:
+            quad.op3 = label
+
+### ==================================
+
+
+### ============= QuadPointerList =============
+class QuadPointerList:
+    def __init__(self, labelList):
+        self.labelList = labelList
+
+    def mergeList(list1, list2):
+        return list1 + list2
+
+### ==================================
+
+
 
 def main():
     start = timer()
