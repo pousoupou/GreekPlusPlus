@@ -1,3 +1,5 @@
+from timeit import default_timer as timer
+
 import sys
 
 ### ============= Helper Functions =============
@@ -84,15 +86,12 @@ class Lexer:
         global line_number
         self.file_path = file_path
 
-        if not(file_path.endswith(".gpp")):
-            print("Filetype Error: Not a .gpp file")
+        if not(file_path.lower().endswith(".gr")):
+            print("Filetype Error: Not a .gr file")
             exit()
         
         fd = open(file_path, "r", encoding="utf-8")
         self.program_lines = [line.rstrip() for line in fd]
-        #TODO: remove this
-        # DEBUG
-        # print(self.program_lines)
         fd.close()
 
     def error(self, case):
@@ -107,7 +106,7 @@ class Lexer:
         elif case == "EOF":
             print("\tEOF reached. Comments are opened but never closed")
         elif case == "unknown":
-            print("\tUnknown character error")
+            print("\tUnknown character error [" + token.recognized_string + "]")
         elif case == "assign":
             print("\t'=' expected")
         
@@ -205,14 +204,15 @@ class Lexer:
             elif category == "relOp":
                 current_string += char
                 self.line_index += 1
-                
                 char = current_line[self.line_index]
+
                 category = categorize(char)
 
-                if category == "equal":
-                    current_string += char
-                    self.line_index += 1
-                    
+                if category == "relOp" or category == "equal":
+                    if current_string + char != "><" and current_string + char != ">>" and current_string + char != "<<":
+                        current_string += char
+                        self.line_index += 1    
+                                    
                 family = "relationalOperator"
                 break
 
@@ -286,7 +286,7 @@ class Lexer:
 
         #TODO: Remove this
         # DEBUG
-        print(next_token)
+        # print(next_token)
         
         return next_token
     
@@ -364,6 +364,8 @@ class Parser:
             print("\tOutput parameter list, or variable declaration expected")
         elif case == "parEnd":
             print("\t'(' is not closed after function or procedure name")
+        elif case == "operator":
+            print("\tExpression or variable or constant expected after operator")
 
         exit()
 
@@ -377,11 +379,10 @@ class Parser:
         return token
 
     def syntax_analyzer(self):
-        print("Syntax analyzer started")
         global token
         token = self.get_token()
         self.program()
-        print("Program compiled successfully")
+        print("Syntax analyzer finished successfully")
 
     def program(self):
         global token
@@ -411,9 +412,7 @@ class Parser:
         else:
             self.error("start")
 
-        if token.recognized_string == "τέλος_προγράμματος":
-            exit()
-        else:
+        if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
 
     def declarations(self):
@@ -442,9 +441,7 @@ class Parser:
                 if token.recognized_string == ",":
                     token = self.get_token()
 
-                    if token.family == "id":
-                        token = self.get_token()
-                    else:
+                    if token.family != "id":
                         self.error("varName")
 
                 else:
@@ -535,6 +532,8 @@ class Parser:
             self.funcoutput()
             self.declarations()
 
+            self.subprograms()
+
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
 
@@ -555,10 +554,9 @@ class Parser:
             token = self.get_token()
 
             self.funcinput()
-            # self.funcoutput()
             self.declarations()
 
-            # token = self.get_token()
+            self.subprograms()
 
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
@@ -588,9 +586,6 @@ class Parser:
 
         elif token.recognized_string == "δήλωση":
             self.declarations()
-        
-        else:
-            self.error("func-input")
 
     def funcoutput(self):
         global token
@@ -605,9 +600,6 @@ class Parser:
         
         elif token.recognized_string == "δήλωση":
             self.declarations()
-        
-        else:
-            self.error("func-output")
 
     # sequence() updates the token at the end
     # so there is no need to call get_token()
@@ -615,27 +607,18 @@ class Parser:
     def sequence(self):
         global token
 
-        print("into statement with token " + token.recognized_string)
         self.statement()
-        print("outo statement with token " + token.recognized_string)
-
-        #TODO: maybe delete this
-        # token = self.get_token()
-
+        
         while token.recognized_string == ";":
             token = self.get_token()
 
-            print("into statement with token " + token.recognized_string)
             self.statement()
-            print("outo statement with token " + token.recognized_string)
-
-            # token = self.get_token()
         
     def statement(self):
         global token
 
         if token.family == "id":
-            self.assignement_stat()
+            self.assignment_stat()
 
         elif token.recognized_string == "εάν":
             self.if_stat()
@@ -661,7 +644,7 @@ class Parser:
         else:
             self.error("statement")
 
-    def assignement_stat(self):
+    def assignment_stat(self):
         global token
 
         token = self.get_token()
@@ -676,10 +659,8 @@ class Parser:
     def if_stat(self):
         global token
         token = self.get_token()
-
+        
         self.condition()
-
-        # token = self.get_token()
 
         if token.recognized_string == "τότε":
             token = self.get_token()
@@ -696,7 +677,6 @@ class Parser:
 
     def elsepart(self):
         global token
-        token = self.get_token()
 
         if token.recognized_string == "αλλιώς":
             token = self.get_token()
@@ -709,15 +689,15 @@ class Parser:
 
         self.condition()
 
-        token = self.get_token()
-
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
 
             self.sequence()
 
-            if token.recognized_string != "οσο_τέλος":
+            if token.recognized_string != "όσο_τέλος":
                 self.error("while-end")
+            else:
+                token = self.get_token()
 
     def do_stat(self):
         global token
@@ -729,8 +709,6 @@ class Parser:
             token = self.get_token()
 
             self.condition()
-
-            token = self.get_token()
 
         else:
             self.error("do-end")
@@ -747,18 +725,11 @@ class Parser:
 
                 self.expression()
 
-                token = self.get_token()
-
                 if token.recognized_string == "έως":
                     token = self.get_token()
 
                     self.expression()
-
-                    token = self.get_token()
-
                     self.step()
-
-                    token = self.get_token()
 
                     if token.recognized_string == "επανάλαβε":
                         token = self.get_token()
@@ -767,6 +738,8 @@ class Parser:
 
                         if token.recognized_string != "για_τέλος":
                             self.error("for-end")
+                        else:
+                            token = self.get_token()
 
                     else:
                         self.error("for-do")
@@ -828,7 +801,6 @@ class Parser:
                 self.error("parEnd")
             else:
                 token = self.get_token()
-            
 
     # just like sequence(), actualparlist() updates
     # the token at the end so there is no need to 
@@ -863,14 +835,10 @@ class Parser:
 
         self.boolterm()
 
-        token = self.get_token()
-
         while token.recognized_string == "ή":
             token = self.get_token()
 
             self.boolterm()
-
-            token = self.get_token()
 
     # boolterm() also updates the token at the end
     def boolterm(self):
@@ -878,14 +846,10 @@ class Parser:
 
         self.boolfactor()
 
-        token = self.get_token()
-
         while token.recognized_string == "και":
             token = self.get_token()
 
             self.boolfactor()
-
-            token = self.get_token()
 
     def boolfactor(self):
         global token
@@ -900,6 +864,8 @@ class Parser:
 
                 if token.recognized_string != "]":
                     self.error("sqBracketsClose")
+                else:
+                    token = self.get_token()
             else:
                 self.error("sqBracketsOpen")
         
@@ -910,11 +876,12 @@ class Parser:
 
             if token.recognized_string != "]":
                 self.error("sqBracketsClose")
+            else:
+                token = self.get_token()
 
         else:
             self.expression()
             self.relational_oper()
-            token = self.get_token()
             self.expression()
 
     # expression() also updates the token at the end
@@ -927,9 +894,10 @@ class Parser:
         while token.family == "addOperator":
             token = self.get_token()
 
-            self.term()
+            if token.family == "addOperator" or token.family == "mulOperator":
+                self.error("operator")
 
-            # token = self.get_token()
+            self.term()
 
     def optional_sign(self):
         global token
@@ -946,14 +914,13 @@ class Parser:
 
         self.factor()
 
-        # token = self.get_token()
-
         while token.family == "mulOperator":
             token = self.get_token()
 
-            self.factor()
+            if token.family == "addOperator" or token.family == "mulOperator":
+                self.error("operator")
 
-            # token = self.get_token()
+            self.factor()
 
     def factor(self):
         global token
@@ -981,40 +948,30 @@ class Parser:
 
         if token.family != "relationalOperator":
             self.error("relOp")
+        else:
+            token = self.get_token()
         
 ### ==================================
 
-
-## ============= Quad =============
-class Quad:
-    def __init__(self, op, op1, op2, op3, label):
-        self.op = op
-        self.op1 = op1
-        self.op2 = op2
-        self.op3 = op3
-        self.label = label
-
-    def __str__(self):
-        return f"{self.op}, {self.op1}, {self.op2}, {self.op3}"
-
-## ============= QuadList =============
-class QuadList:
-    def __init__(self):
-        self.programList = []
-        self.quad_counter = 0
-
-    def __str__(self):
-        return "\n".join(f"{i}: {quad}" for i, quad in enumerate(self.programList))
-    
-    def genQuad(self, op, x, y, z):
-        self.programList.append(Quad(op, x, y, z))
-        self.quad_counter += 1
-
-
 def main():
+    start = timer()
     lexer = Lexer(source_file)
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
+    # lexer.nextToken()
 
     parser = Parser(lexer)
     parser.syntax_analyzer()
+
+    end = timer()
+    print("Compiled successfuly in: {:.4f} seconds".format(end - start))
 
 main()
