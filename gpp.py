@@ -651,6 +651,7 @@ class Parser:
         else:
             self.error("statement")
 
+    # CHANGED FOR INTERMEDIATE CODE
     def assignment_stat(self):
         global token
         
@@ -895,6 +896,7 @@ class Parser:
             self.expression()
 
     # expression() also updates the token at the end
+    # CHANGED FOR INTERMEDIATE CODE
     def expression(self):
         global token
         
@@ -916,7 +918,8 @@ class Parser:
             first_operand = temp_result  # Update first_operand for chained operations
         
         return first_operand
-
+    
+    # CHANGED FOR INTERMEDIATE CODE
     def term(self):
         global token
         
@@ -938,6 +941,7 @@ class Parser:
             
         return first_operand
 
+    # CHANGED FOR INTERMEDIATE CODE
     def factor(self):
         global token
         
