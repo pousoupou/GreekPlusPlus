@@ -300,6 +300,11 @@ class Parser:
         self.temp_counter = 1
         self.label_counter = 1
 
+    def new_temp(self):
+        temp = f"t{self.temp_counter}"
+        self.temp_counter += 1
+        return temp
+
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
 
@@ -405,8 +410,6 @@ class Parser:
     def program_block(self):
         global token
 
-        self.quad_list.genQuad("PROGRAM_START", "-", "-", "-") # Generate the start program quad
-
         self.declarations()
         self.subprograms()
 
@@ -419,10 +422,6 @@ class Parser:
 
         if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
-
-        self.quad_list.genQuad("PROGRAM_END", "-", "-", "-") # Generate the end program quad
-
-        print(self.quad_list)
 
     def declarations(self):
         global token
@@ -654,13 +653,16 @@ class Parser:
 
     def assignment_stat(self):
         global token
-
+        
+        var_name = token.recognized_string  # Save the variable name
         token = self.get_token()
-
+        
         if token.recognized_string == ":=":
             token = self.get_token()
-
-            self.expression()
+            
+            expr_place = self.expression()
+            # Generate assignment quad
+            self.quad_list.genQuad(':=', expr_place, '_', var_name)
         else:
             self.error("assign")
 
@@ -895,61 +897,75 @@ class Parser:
     # expression() also updates the token at the end
     def expression(self):
         global token
-
-        # self.optional_sign()
-        self.term()
+        
+        # Take the first operand
+        first_operand = self.term()
 
         while token.family == "addOperator":
+            op = token.recognized_string  # Save the operator (+ or -)
             token = self.get_token()
-
+            
             if token.family == "addOperator" or token.family == "mulOperator":
                 self.error("operator")
+                
+            second_operand = self.term()
+            
+            # Generate quad for the addition/subtraction
+            temp_result = self.new_temp()
+            self.quad_list.genQuad(op, first_operand, second_operand, temp_result)
+            first_operand = temp_result  # Update first_operand for chained operations
+        
+        return first_operand
 
-            self.term()
-
-    def optional_sign(self):
-        global token
-
-        if token.family != "addOperator" and token.family != "number" and token.recognized_string != "(" and token.family != "id":
-            self.error("optionalSign")
-        else:
-            token = self.get_token()
-
-
-    # term() also updates the token at the end
     def term(self):
         global token
-
-        self.factor()
-
+        
+        first_operand = self.factor()
+        
         while token.family == "mulOperator":
+            op = token.recognized_string  # Save the operator (* or /)
             token = self.get_token()
-
+            
             if token.family == "addOperator" or token.family == "mulOperator":
                 self.error("operator")
-
-            self.factor()
+                
+            second_operand = self.factor()
+            
+            # Generate quad for the multiplication/division
+            temp_result = self.new_temp()
+            self.quad_list.genQuad(op, first_operand, second_operand, temp_result)
+            first_operand = temp_result  # Update first_operand for chained operations
+            
+        return first_operand
 
     def factor(self):
         global token
-
+        
         if token.family == "number":
+            operand = token.recognized_string
             token = self.get_token()
-
+            return operand
+            
         elif token.recognized_string == "(":
             token = self.get_token()
-
-            self.expression()
-
+            
+            operand = self.expression()
+            
             if token.recognized_string != ")":
                 self.error("bracketsClose")
             else:
                 token = self.get_token()
-
+            return operand
+            
         elif token.family == "id":
+            operand = token.recognized_string
             token = self.get_token()
-
-            self.idtail()
+            
+            if token.recognized_string == "(":
+                self.idtail()
+                temp = self.new_temp()
+                return temp
+            return operand
 
     def relational_oper(self):
         global token
@@ -960,6 +976,8 @@ class Parser:
             token = self.get_token()
         
 ### ==================================
+
+
 
 ### ============= Quad =============
 # Represents each quad, for example -> (1: + a b c)
@@ -995,6 +1013,12 @@ class QuadList:
     def __init__(self):
         self.programList = []
         self.quad_counter = 1
+        self.label_counter = 1
+
+    def new_label(self):
+        label = self.label_counter
+        self.label_counter += 1
+        return label
 
     def __str__(self):
         quad_strings = []
@@ -1008,7 +1032,7 @@ class QuadList:
     
     # Generates a new quad and adds it to the program list
     def genQuad(self, op, op1, op2, op3):
-        new_quad = Quad(
+        quad = Quad(
             label = self.quad_counter,
             op = op,
             op1 = op1,
@@ -1016,10 +1040,9 @@ class QuadList:
             op3 = op3
         )
 
-        self.programList.append(new_quad)
+        self.programList.append(quad)
         self.quad_counter += 1
-
-        return new_quad.label
+        return quad.label
 
 
     # For each quad in list, we put label as op3
@@ -1028,9 +1051,10 @@ class QuadList:
     # 101: +, a, 1, a
     # 102: jump, _, _, 104
     # 103: +, a, 2, a
-    def backPatch(self, quad_index_list, label):
-        for quad_index in quad_index_list:
-            self.programList[quad_index - 1].op3 = label
+    def backPatch(self, quad_list, target_label):
+        for quad_ptr in quad_list.labelList:
+            quad_num = int(quad_ptr.label)        
+            self.programList[quad_num - 1].op3 = target_label
 
 
 ### ==================================
@@ -1038,11 +1062,19 @@ class QuadList:
 
 ### ============= QuadPointerList =============
 class QuadPointerList:
-    def __init__(self, labelList):
-        self.labelList = labelList
+    def __init__(self):
+        self.labelList = []
 
-    def mergeList(list1, list2):
-        return list1 + list2
+    def __str__(self):
+        return ",".join(str(qp) for qp in self.labelList)
+
+    def add(self, label):
+        self.labelList.append(QuadPointer(label))
+
+    def merge(self, other_list):
+        merged = QuadPointerList()
+        merged.labelList = self.labelList + other_list.labelList
+        return merged
 
 ### ==================================
 
@@ -1054,6 +1086,10 @@ def main():
 
     parser = Parser(lexer)
     parser.syntax_analyzer()
+
+    # Print generated quads
+    print("\nGenerated Intermediate Code:")
+    print(parser.quad_list)
 
     end = timer()
     print("Compiled successfuly in: {:.4f} seconds".format(end - start))
