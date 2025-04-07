@@ -698,6 +698,7 @@ class Parser:
         global token
         token = self.get_token()
 
+
         self.condition()
 
         if token.recognized_string == "επανάλαβε":
