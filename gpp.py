@@ -815,11 +815,13 @@ class Parser:
         else:
             self.error("varName")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def print_stat(self):
         global token
         token = self.get_token()
 
-        self.expression()
+        expr_result = self.expression()
+        self.quad_list.genQuad('print', expr_result, '_', '_')
 
     def call_stat(self):
         global token
