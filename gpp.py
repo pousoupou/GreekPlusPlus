@@ -667,17 +667,37 @@ class Parser:
         else:
             self.error("assign")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def if_stat(self):
         global token
         token = self.get_token()
         
-        self.condition()
+        condition_temp = self.condition()
+        
+        false_list = QuadPointerList()
+        false_list.add(self.quad_list.nextQuad())
+        self.quad_list.genQuad('jump', '_', '_', condition_temp)
 
         if token.recognized_string == "τότε":
             token = self.get_token()
-
+            
             self.sequence()
+            
+            # Create jump to skip else-block (will be backpatched to end of if)
+            after_then_jump = QuadPointerList()
+            after_then_jump.add(self.quad_list.nextQuad())
+            self.quad_list.genQuad('jump', '_', '_', '_')
+            
+            # Backpatch false jumps to else-block
+            else_label = self.quad_list.nextQuad()
+            self.quad_list.backPatch(false_list, else_label)
+
             self.elsepart()
+
+            # Backpatch jumps after then-block to end of if
+            end_label = self.quad_list.nextQuad()
+            print(end_label)
+            self.quad_list.backPatch(after_then_jump, end_label)
 
             if token.recognized_string != "εάν_τέλος":
                 self.error("if-end")
@@ -705,7 +725,7 @@ class Parser:
 
         #QuadPointerList because we dont know the end_label yet
         false_list = QuadPointerList()
-        false_jump_quad = self.quad_list.genQuad('jumpfalse', condition_result, '_', '_')
+        false_jump_quad = self.quad_list.genQuad('jump', '_', '_', condition_result)
         false_list.add(false_jump_quad)
 
         if token.recognized_string == "επανάλαβε":
@@ -881,7 +901,6 @@ class Parser:
         global token
 
         bool_factor_result = self.boolfactor()
-        print(bool_factor_result)
         while token.recognized_string == "και":
             token = self.get_token()
 
