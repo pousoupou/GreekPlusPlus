@@ -698,29 +698,35 @@ class Parser:
     def while_stat(self):
         global token
         token = self.get_token()
-        
+
+        #Start label
         start_label = self.quad_list.nextQuad()
         condition_result = self.condition()
-        
-        # Generate quad for conditional jump
-        false_label = self.quad_list.nextQuad() + 1
-        print(false_label)
-        self.quad_list.genQuad('jumpfalse', condition_result, '_', false_label)
-        
+
+        #QuadPointerList because we dont know the end_label yet
+        false_list = QuadPointerList()
+        false_jump_quad = self.quad_list.genQuad('jumpfalse', condition_result, '_', '_')
+        false_list.add(false_jump_quad)
+
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
-            
+
             self.sequence()
-            
-            # Generate quad to jump back to the beginning of the loop
+
             self.quad_list.genQuad('jump', '_', '_', start_label)
-            
+
+            end_label = self.quad_list.nextQuad()
+
+            #BackPatch till after the loop
+            self.quad_list.backPatch(false_list, end_label)
+
             if token.recognized_string != "όσο_τέλος":
                 self.error("while-end")
             else:
                 token = self.get_token()
         else:
             self.error("επανάλαβε expected after condition")
+
 
     def do_stat(self):
         global token
