@@ -727,7 +727,6 @@ class Parser:
         else:
             self.error("επανάλαβε expected after condition")
 
-
     def do_stat(self):
         global token
         token = self.get_token()
@@ -871,7 +870,7 @@ class Parser:
             second_term = self.boolterm()
 
             #Generate quad for OR
-            temp_result = self.new_temp()
+            temp_result = self.quad_list.nextQuad() + 2
             self.quad_list.genQuad('or', bool_term_result, second_term, temp_result)
 
         return bool_term_result
@@ -882,14 +881,14 @@ class Parser:
         global token
 
         bool_factor_result = self.boolfactor()
-
+        print(bool_factor_result)
         while token.recognized_string == "και":
             token = self.get_token()
 
             second_factor = self.boolfactor()
 
             #Generate quad for AND
-            temp_result = self.new_temp()
+            temp_result = self.quad_list.nextQuad() + 2
             self.quad_list.genQuad('and', bool_factor_result, second_factor, temp_result)
             bool_factor_result = temp_result
 
@@ -909,7 +908,7 @@ class Parser:
                 condition_result = self.condition()
 
                 #Generate the quad for the NOT (boolfactor -> NOT [ condition ])
-                temp_result = self.new_temp()
+                temp_result = self.quad_list.nextQuad() + 2
                 self.quad_list.genQuad('not', condition_result, '_', temp_result)
                 
                 if token.recognized_string != "]":
@@ -942,7 +941,7 @@ class Parser:
             right_expr = self.expression()
 
             #Generate the quad for relational operation
-            temp_result = self.new_temp()
+            temp_result = self.quad_list.nextQuad() + 2
             self.quad_list.genQuad(rel_op, left_expr, right_expr, temp_result)
 
             return temp_result
