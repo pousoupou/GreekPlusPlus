@@ -694,22 +694,33 @@ class Parser:
 
             self.sequence()
 
+    #CHANGED FOR INTERMEDIATE CODE
     def while_stat(self):
         global token
         token = self.get_token()
-
-
-        self.condition()
-
+        
+        start_label = self.quad_list.nextQuad()
+        condition_result = self.condition()
+        
+        # Generate quad for conditional jump
+        false_label = self.quad_list.nextQuad() + 1
+        print(false_label)
+        self.quad_list.genQuad('jumpfalse', condition_result, '_', false_label)
+        
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
-
+            
             self.sequence()
-
+            
+            # Generate quad to jump back to the beginning of the loop
+            self.quad_list.genQuad('jump', '_', '_', start_label)
+            
             if token.recognized_string != "όσο_τέλος":
                 self.error("while-end")
             else:
                 token = self.get_token()
+        else:
+            self.error("επανάλαβε expected after condition")
 
     def do_stat(self):
         global token
@@ -842,27 +853,43 @@ class Parser:
 
     # condition() updates the token at the end
     # like sequence() and actualparlist()
+    #CHANGED FOR INTERMEDIATE CODE
     def condition(self):
         global token
 
-        self.boolterm()
+        bool_term_result = self.boolterm()
 
         while token.recognized_string == "ή":
             token = self.get_token()
 
-            self.boolterm()
+            second_term = self.boolterm()
+
+            #Generate quad for OR
+            temp_result = self.new_temp()
+            self.quad_list.genQuad('or', bool_term_result, second_term, temp_result)
+
+        return bool_term_result
 
     # boolterm() also updates the token at the end
+    #CHANGED FOR INTERMEDIATE CODE
     def boolterm(self):
         global token
 
-        self.boolfactor()
+        bool_factor_result = self.boolfactor()
 
         while token.recognized_string == "και":
             token = self.get_token()
 
-            self.boolfactor()
+            second_factor = self.boolfactor()
 
+            #Generate quad for AND
+            temp_result = self.new_temp()
+            self.quad_list.genQuad('and', bool_factor_result, second_factor, temp_result)
+            bool_factor_result = temp_result
+
+        return bool_factor_result
+
+    # CHANGED FOR INTERMEDIATE CODE
     def boolfactor(self):
         global token
 
@@ -872,29 +899,47 @@ class Parser:
             if token.recognized_string == "[":
                 token = self.get_token()
 
-                self.condition()
+                #Get the condition result
+                condition_result = self.condition()
 
+                #Generate the quad for the NOT (boolfactor -> NOT [ condition ])
+                temp_result = self.new_temp()
+                self.quad_list.genQuad('not', condition_result, '_', temp_result)
+                
                 if token.recognized_string != "]":
                     self.error("sqBracketsClose")
                 else:
                     token = self.get_token()
+
+                return temp_result
+            
             else:
                 self.error("sqBracketsOpen")
-        
+
         elif token.recognized_string == "[":
             token = self.get_token()
 
-            self.condition()
+            #Get the condition result
+            condition_result = self.condition()
 
             if token.recognized_string != "]":
                 self.error("sqBracketsClose")
             else:
                 token = self.get_token()
 
+            return condition_result
+
         else:
-            self.expression()
+            left_expr = self.expression()
+            rel_op = token.recognized_string
             self.relational_oper()
-            self.expression()
+            right_expr = self.expression()
+
+            #Generate the quad for relational operation
+            temp_result = self.new_temp()
+            self.quad_list.genQuad(rel_op, left_expr, right_expr, temp_result)
+
+            return temp_result
 
     # expression() also updates the token at the end
     # CHANGED FOR INTERMEDIATE CODE
