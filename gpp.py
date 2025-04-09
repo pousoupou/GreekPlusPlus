@@ -1057,14 +1057,18 @@ class Parser:
                 token = self.get_token()
             return operand
             
+
+        # If factor -> id idtail
         elif token.family == "id":
             operand = token.recognized_string
             token = self.get_token()
             
+            # Function or procedure call (it has '(' )
             if token.recognized_string == "(":
-                self.idtail()
                 temp = self.new_temp()
+                self.idtail()
                 return temp
+                
             return operand
 
     def relational_oper(self):
