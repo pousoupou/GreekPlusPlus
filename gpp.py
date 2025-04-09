@@ -599,37 +599,6 @@ class Parser:
         else:
             self.error("proc-interface")
 
-        def funcinput(self):
-            global token
-
-            if token.recognized_string == "είσοδος":
-                token = self.get_token()
-
-                if token.family == "id":
-                    self.varlist()
-                else:
-                    self.error("varName")
-            
-            elif token.recognized_string == "έξοδος":
-                self.funcoutput()
-
-            elif token.recognized_string == "δήλωση":
-                self.declarations()
-
-        def funcoutput(self):
-            global token
-
-            if token.recognized_string == "έξοδος":
-                token = self.get_token()
-
-                if token.family == "id":
-                    self.varlist()
-                else:
-                    self.error("varName")
-            
-            elif token.recognized_string == "δήλωση":
-                self.declarations()
-
     def funcinput(self):
         global token
 
