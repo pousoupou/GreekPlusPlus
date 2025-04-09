@@ -881,7 +881,6 @@ class Parser:
 
         if token.family == "id":
             token = self.get_token()
-
             self.idtail()
         else:
             self.error("funDec")
