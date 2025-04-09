@@ -392,6 +392,7 @@ class Parser:
         self.program()
         print("Syntax analyzer finished successfully")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def program(self):
         global token
         
@@ -399,19 +400,23 @@ class Parser:
             token = self.get_token()
             
             if token.family == "id":
+                self.program_name = token.recognized_string #Store the name to use later
                 token = self.get_token()
                 self.program_block()
             else:
                 self.error("name")
-
         else:
             self.error("program")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def program_block(self):
         global token
 
         self.declarations()
+
         self.subprograms()
+
+        self.quad_list.genQuad('begin_block', self.program_name, '_', '_')
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -422,6 +427,8 @@ class Parser:
 
         if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
+
+        self.quad_list.genQuad('end_block', self.program_name, '_', '_')
 
     def declarations(self):
         global token
@@ -476,10 +483,12 @@ class Parser:
 
             token = self.get_token()
 
+    #CHANGED FOR INTERMEDIATE CODE
     def func(self):
         global token
 
         if token.family == "id":
+            self.func_name = token.recognized_string
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -491,7 +500,6 @@ class Parser:
                     token = self.get_token()
 
                     self.funcblock()
-
                 else:
                     self.error("bracketsClose")
             else:
@@ -499,10 +507,12 @@ class Parser:
         else:
             self.error("funDec")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def proc(self):
         global token
 
         if token.family == "id":
+            self.proc_name = token.recognized_string
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -529,6 +539,7 @@ class Parser:
         elif token.recognized_string != ")":
             self.error("parList")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def funcblock(self):
         global token
 
@@ -541,6 +552,8 @@ class Parser:
 
             self.subprograms()
 
+            self.quad_list.genQuad('begin_block', self.func_name, '_', '_')
+
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
 
@@ -551,9 +564,13 @@ class Parser:
             
             else:
                 self.error("func-start")
+
+            self.quad_list.genQuad('end_block', self.func_name, '_', '_')
+
         else:
             self.error("func-interface")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def procblock(self):
         global token
 
@@ -565,6 +582,8 @@ class Parser:
 
             self.subprograms()
 
+            self.quad_list.genQuad('begin_block', self.proc_name, '_', '_')
+
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
 
@@ -574,8 +593,42 @@ class Parser:
                     self.error("proc-end")
             else:
                 self.error("proc-start")
+
+            self.quad_list.genQuad('end_block', self.proc_name,'_', '_')
+
         else:
             self.error("proc-interface")
+
+        def funcinput(self):
+            global token
+
+            if token.recognized_string == "είσοδος":
+                token = self.get_token()
+
+                if token.family == "id":
+                    self.varlist()
+                else:
+                    self.error("varName")
+            
+            elif token.recognized_string == "έξοδος":
+                self.funcoutput()
+
+            elif token.recognized_string == "δήλωση":
+                self.declarations()
+
+        def funcoutput(self):
+            global token
+
+            if token.recognized_string == "έξοδος":
+                token = self.get_token()
+
+                if token.family == "id":
+                    self.varlist()
+                else:
+                    self.error("varName")
+            
+            elif token.recognized_string == "δήλωση":
+                self.declarations()
 
     def funcinput(self):
         global token
@@ -696,7 +749,6 @@ class Parser:
 
             # Backpatch jumps after then-block to end of if
             end_label = self.quad_list.nextQuad()
-            print(end_label)
             self.quad_list.backPatch(after_then_jump, end_label)
 
             if token.recognized_string != "εάν_τέλος":
@@ -821,7 +873,7 @@ class Parser:
         token = self.get_token()
 
         expr_result = self.expression()
-        self.quad_list.genQuad('print', expr_result, '_', '_')
+        self.quad_list.genQuad('out', expr_result, '_', '_')
 
     def call_stat(self):
         global token
@@ -865,17 +917,21 @@ class Parser:
 
             self.actualparitem()
 
+    # CHANGED FOR INTERMEDIATE CODE
     def actualparitem(self):
         global token
-
         if token.recognized_string != "%":
-            self.expression()
+            # (CV)
+            expr_place = self.expression()
+            self.quad_list.genQuad('par', expr_place, 'CV', '_')
         else:
+            # (REF)
             token = self.get_token()
-
             if token.family != "id":
                 self.error("varName")
             else:
+                var_name = token.recognized_string
+                self.quad_list.genQuad('par', var_name, 'REF', '_')
                 token = self.get_token()
 
     # condition() updates the token at the end
