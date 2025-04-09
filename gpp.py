@@ -301,7 +301,7 @@ class Parser:
         self.label_counter = 1
 
     def new_temp(self):
-        temp = f"t{self.temp_counter}"
+        temp = f"t_{self.temp_counter}"
         self.temp_counter += 1
         return temp
 
@@ -416,7 +416,7 @@ class Parser:
 
         self.subprograms()
 
-        self.quad_list.genQuad('begin_block', self.program_name, '_', '_')
+        self.quad_list.genQuad('begin_block', self.program_name , '_', '_')
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -1127,7 +1127,7 @@ class QuadList:
     def __str__(self):
         quad_strings = []
         for quad in self.programList:
-            quad_strings.append(f"{quad.label}: {quad.op} {quad.op1}, {quad.op2}, {quad.op3}")
+            quad_strings.append(f"{quad.label}: {quad.op} {quad.op1} , {quad.op2} , {quad.op3}")
         return "\n".join(quad_strings)
 
     # Returns the next available quad number
