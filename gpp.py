@@ -827,11 +827,14 @@ class Parser:
 
             self.expression()
 
+    #CHANGED FOR INTERMEDIATE CODE
     def input_stat(self):
         global token
         token = self.get_token()
 
         if token.family == "id":
+            in_var = token.recognized_string
+            self.quad_list.genQuad('in', in_var, '_', '_')
             token = self.get_token()
         else:
             self.error("varName")
