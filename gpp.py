@@ -416,7 +416,7 @@ class Parser:
 
         self.subprograms()
 
-        self.quad_list.genQuad('begin_block', self.program_name , '_', '_')
+        self.quad_list.genQuad('begin_block,', self.program_name , '_', '_')
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -428,7 +428,8 @@ class Parser:
         if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
 
-        self.quad_list.genQuad('end_block', self.program_name, '_', '_')
+        self.quad_list.genQuad('halt,', '_', '_', '_')
+        self.quad_list.genQuad('end_block,', self.program_name, '_', '_')
 
     def declarations(self):
         global token
@@ -552,7 +553,7 @@ class Parser:
 
             self.subprograms()
 
-            self.quad_list.genQuad('begin_block', self.func_name, '_', '_')
+            self.quad_list.genQuad('begin_block,', self.func_name, '_', '_')
 
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
@@ -565,7 +566,7 @@ class Parser:
             else:
                 self.error("func-start")
 
-            self.quad_list.genQuad('end_block', self.func_name, '_', '_')
+            self.quad_list.genQuad('end_block,', self.func_name, '_', '_')
 
         else:
             self.error("func-interface")
@@ -582,7 +583,7 @@ class Parser:
 
             self.subprograms()
 
-            self.quad_list.genQuad('begin_block', self.proc_name, '_', '_')
+            self.quad_list.genQuad('begin_block,', self.proc_name, '_', '_')
 
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
@@ -594,7 +595,7 @@ class Parser:
             else:
                 self.error("proc-start")
 
-            self.quad_list.genQuad('end_block', self.proc_name,'_', '_')
+            self.quad_list.genQuad('end_block,', self.proc_name,'_', '_')
 
         else:
             self.error("proc-interface")
@@ -685,7 +686,7 @@ class Parser:
             
             expr_place = self.expression()
             # Generate assignment quad
-            self.quad_list.genQuad(':=', expr_place, '_', var_name)
+            self.quad_list.genQuad(':=,', expr_place, '_', var_name)
         else:
             self.error("assign")
 
@@ -698,7 +699,7 @@ class Parser:
         
         false_list = QuadPointerList()
         false_list.add(self.quad_list.nextQuad())
-        self.quad_list.genQuad('jump', '_', '_', condition_temp)
+        self.quad_list.genQuad('jump,', '_', '_', condition_temp)
 
         if token.recognized_string == "τότε":
             token = self.get_token()
@@ -708,7 +709,7 @@ class Parser:
             # Create jump to skip else-block (will be backpatched to end of if)
             after_then_jump = QuadPointerList()
             after_then_jump.add(self.quad_list.nextQuad())
-            self.quad_list.genQuad('jump', '_', '_', '_')
+            self.quad_list.genQuad('jump,', '_', '_', '_')
             
             # Backpatch false jumps to else-block
             else_label = self.quad_list.nextQuad()
@@ -746,7 +747,7 @@ class Parser:
 
         #QuadPointerList because we dont know the end_label yet
         false_list = QuadPointerList()
-        false_jump_quad = self.quad_list.genQuad('jump', '_', '_', condition_result)
+        false_jump_quad = self.quad_list.genQuad('jump,', '_', '_', condition_result)
         false_list.add(false_jump_quad)
 
         if token.recognized_string == "επανάλαβε":
@@ -754,7 +755,7 @@ class Parser:
 
             self.sequence()
 
-            self.quad_list.genQuad('jump', '_', '_', start_label)
+            self.quad_list.genQuad('jump,', '_', '_', start_label)
 
             end_label = self.quad_list.nextQuad()
 
@@ -768,16 +769,25 @@ class Parser:
         else:
             self.error("επανάλαβε expected after condition")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def do_stat(self):
         global token
         token = self.get_token()
+
+        #Label for the start of the loop
+        start_label = self.quad_list.nextQuad()
 
         self.sequence()
 
         if token.recognized_string == "μέχρι":
             token = self.get_token()
 
-            self.condition()
+            
+            condition_result = self.condition()
+            temp_result = self.new_temp()
+
+            #Jump back at the start if the condition is false
+            self.quad_list.genQuad('jump,', '_', '_', start_label)
 
         else:
             self.error("do-end")
@@ -834,7 +844,7 @@ class Parser:
 
         if token.family == "id":
             in_var = token.recognized_string
-            self.quad_list.genQuad('in', in_var, '_', '_')
+            self.quad_list.genQuad('in,', in_var, '_', '_')
             token = self.get_token()
         else:
             self.error("varName")
@@ -845,7 +855,7 @@ class Parser:
         token = self.get_token()
 
         expr_result = self.expression()
-        self.quad_list.genQuad('out', expr_result, '_', '_')
+        self.quad_list.genQuad('out,', expr_result, '_', '_')
 
     def call_stat(self):
         global token
@@ -894,7 +904,7 @@ class Parser:
         if token.recognized_string != "%":
             # (CV)
             expr_place = self.expression()
-            self.quad_list.genQuad('par', expr_place, 'CV', '_')
+            self.quad_list.genQuad('par,', expr_place, 'CV', '_')
         else:
             # (REF)
             token = self.get_token()
@@ -902,7 +912,7 @@ class Parser:
                 self.error("varName")
             else:
                 var_name = token.recognized_string
-                self.quad_list.genQuad('par', var_name, 'REF', '_')
+                self.quad_list.genQuad('par,', var_name, 'REF', '_')
                 token = self.get_token()
 
     # condition() updates the token at the end
@@ -920,7 +930,7 @@ class Parser:
 
             #Generate quad for OR
             temp_result = self.quad_list.nextQuad() + 2
-            self.quad_list.genQuad('or', bool_term_result, second_term, temp_result)
+            self.quad_list.genQuad('or,', bool_term_result, second_term, temp_result)
 
         return bool_term_result
 
@@ -937,7 +947,7 @@ class Parser:
 
             #Generate quad for AND
             temp_result = self.quad_list.nextQuad() + 2
-            self.quad_list.genQuad('and', bool_factor_result, second_factor, temp_result)
+            self.quad_list.genQuad('and,', bool_factor_result, second_factor, temp_result)
             bool_factor_result = temp_result
 
         return bool_factor_result
@@ -957,7 +967,7 @@ class Parser:
 
                 #Generate the quad for the NOT (boolfactor -> NOT [ condition ])
                 temp_result = self.quad_list.nextQuad() + 2
-                self.quad_list.genQuad('not', condition_result, '_', temp_result)
+                self.quad_list.genQuad('not,', condition_result, '_', temp_result)
                 
                 if token.recognized_string != "]":
                     self.error("sqBracketsClose")
@@ -1154,9 +1164,9 @@ class QuadList:
 
     # For each quad in list, we put label as op3
     # For example -> If list hold the quads [100, 102] then the "output" will be:
-    # 100: jump, _, _, 104
+    # 100: jump,, _, _, 104
     # 101: +, a, 1, a
-    # 102: jump, _, _, 104
+    # 102: jump,, _, _, 104
     # 103: +, a, 2, a
     def backPatch(self, quad_list, target_label):
         for quad_ptr in quad_list.labelList:
