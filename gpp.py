@@ -1095,7 +1095,6 @@ class Parser:
 ### ==================================
 
 
-
 ### ============= Quad =============
 # Represents each quad, for example -> (1: + a b c)
 class Quad:
