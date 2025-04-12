@@ -1110,7 +1110,6 @@ class Quad:
 
 ### ==================================
 
-
 ### ============= QuadPointer =============
 # Used for the label of the quad, for example -> (1)
 class QuadPointer:
@@ -1121,7 +1120,6 @@ class QuadPointer:
         return f"{self.label}"
 
 ### ==================================
-
 
 ### ============= QuadList =============
 # Represents a list of quads an also holds the number of quads that have been created so far
@@ -1172,9 +1170,7 @@ class QuadList:
             quad_num = int(quad_ptr.label)        
             self.programList[quad_num - 1].op3 = target_label
 
-
 ### ==================================
-
 
 ### ============= QuadPointerList =============
 class QuadPointerList:
