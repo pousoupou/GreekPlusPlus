@@ -817,7 +817,6 @@ class Parser:
 
                     final_value = self.expression()
                     
-                    # Check if step is specified
                     if token.recognized_string == "με_βήμα":
                         token = self.get_token()
                         step_value = self.expression()
