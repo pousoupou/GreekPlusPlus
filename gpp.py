@@ -1190,6 +1190,103 @@ class QuadPointerList:
 
 ### ==================================
 
+### ============= Symbol =============
+class Symbol:
+    def __init__(self, name, kind, data_type, offset, param_mode):
+        self.name = name
+        self.kind = kind
+        self.data_type = data_type # Here only integers allowed
+        self.offset = offset
+        self.param_mode = param_mode # CV or REF
+        
+    def __str__(self):
+        return f"Name: {self.name}, Kind: {self.kind}, Type: {self.data_type}, Offset: {self.offset}, Parameter Mode: {self.param_mode}"
+
+### ==================================
+
+
+### ============= Scope =============
+class Scope:
+    def __init__(self, name, nesting_level):
+        self.name = name
+        self.nesting_level = nesting_level
+        self.symbols = {}
+        self.offset = 12
+
+    def __str__(self):
+        symbols_str = "\n\t".join([str(symbol) for symbol in self.symbols.values()])
+        return f"Scope: {self.name}, Nesting Level: {self.nesting_level}\n\t{symbols_str}"
+    
+    def add_symbol(self, symbol):
+        # Symbol already exists in this scope
+        if symbol.name in self.symbols:
+            return False
+        
+        if symbol.kind == 'variable' or symbol.kind == 'parameter':
+            symbol.offset = self.offset
+            self.offset += 4 # We only have integers (4 bytes)
+
+        self.symbols[symbol.name] = symbol
+        return True
+    
+    def lookup(self, name):
+        return self.symbols.get(name)
+
+### ==================================
+
+
+### ============= SymbolTable =============
+class SymbolTable:
+    def __init__(self):
+        self.scopes = []
+        self.current_scope = None
+        self.temp_counter = 1
+
+    def __str__(self):
+        return "\n".join([str(scope) for scope in self.scopes])
+
+
+    def open_scope(self, name):
+        nesting_level = 0 if not self.scopes else self.current_scope.nesting_level + 1
+        new_scope = Scope(name, nesting_level)
+        self.scopes.append(new_scope)
+        self.current_scope = new_scope
+        return new_scope
+
+    def close_scope(self):
+        if self.scopes:
+            closed_scope = self.current_scope
+            self.scopes.pop()
+            self.current_scope = self.scopes[-1] if self.scopes else None
+            return closed_scope
+        return None
+    
+    def add_symbol(self, name, kind, data_type=None, parameter_mode=None):
+        if not self.current_scope:
+            return False
+        
+        symbol = Symbol(name, kind, data_type, parameter_mode)
+        return self.current_scope.add_symbol(symbol)
+    
+    def lookup(self, name, current_scope_only=False):
+        if not self.scopes:
+            return None
+        
+        # Check current scope first
+        symbol = self.current_scope.lookup(name)
+        if symbol or current_scope_only:
+            return symbol
+        
+        # If not found and we're allowed to check parent scopes
+        for scope in reversed(self.scopes[:-1]):
+            symbol = scope.lookup(name)
+            if symbol:
+                return symbol
+        
+        return None
+    
+### ==================================
+
 
 
 def main():
