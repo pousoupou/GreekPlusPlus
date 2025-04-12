@@ -797,34 +797,59 @@ class Parser:
         else:
             self.error("do-end")
 
+    #CHANGED FOR INTERMEDIATE CODE
     def for_stat(self):
         global token
         token = self.get_token()
 
         if token.family == "id":
+            counter_var = token.recognized_string
             token = self.get_token()
 
             if token.recognized_string == ":=":
                 token = self.get_token()
 
-                self.expression()
+                initial_value = self.expression()
+                self.quad_list.genQuad(':=,', initial_value, '_', counter_var)
 
                 if token.recognized_string == "έως":
                     token = self.get_token()
 
-                    self.expression()
-                    self.step()
+                    final_value = self.expression()
+                    
+                    # Check if step is specified
+                    if token.recognized_string == "με_βήμα":
+                        token = self.get_token()
+                        step_value = self.expression()
+
+                    start_label = self.quad_list.nextQuad()
+                    
+                    comparison_temp = self.new_temp()
+                    
+                    self.quad_list.genQuad('<=,', counter_var, final_value, comparison_temp)
+                    
+                    exit_list = QuadPointerList()
+                    exit_list.add(self.quad_list.nextQuad())
+                    self.quad_list.genQuad('jump,', '_', '_', comparison_temp)
 
                     if token.recognized_string == "επανάλαβε":
                         token = self.get_token()
 
                         self.sequence()
 
+                        increment_temp = self.new_temp()
+                        self.quad_list.genQuad('+,', counter_var, step_value, increment_temp)
+                        self.quad_list.genQuad(':=,', increment_temp, '_', counter_var)
+                        
+                        self.quad_list.genQuad('jump,', '_', '_', start_label)
+                        
+                        exit_label = self.quad_list.nextQuad()
+                        self.quad_list.backPatch(exit_list, exit_label)
+
                         if token.recognized_string != "για_τέλος":
                             self.error("for-end")
                         else:
                             token = self.get_token()
-
                     else:
                         self.error("for-do")
                 else:
@@ -862,13 +887,19 @@ class Parser:
         expr_result = self.expression()
         self.quad_list.genQuad('out,', expr_result, '_', '_')
 
+    #CHANGED FOR INTERMEDIATE CODE
     def call_stat(self):
         global token
+
         token = self.get_token()
 
         if token.family == "id":
+            func_name = token.recognized_string
             token = self.get_token()
+
             self.idtail()
+
+            self.quad_list.genQuad('call,', func_name, '_', '_')
         else:
             self.error("funDec")
 
@@ -876,7 +907,6 @@ class Parser:
         global token
         
         self.actualpars()
-
 
     def actualpars(self):
         global token
