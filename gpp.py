@@ -300,6 +300,11 @@ class Parser:
         self.temp_counter = 1
         self.label_counter = 1
 
+        # FOR SYMBOL TABLE
+        self.symbol_table = SymbolTable()
+        self.current_scope = "global"
+        self.symbol_table.open_scope("global") # open global scope immediatelly
+
     def new_temp(self):
         temp = f"t_{self.temp_counter}"
         self.temp_counter += 1
