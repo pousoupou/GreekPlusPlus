@@ -874,8 +874,9 @@ class Parser:
 
     def idtail(self):
         global token
-
+        
         self.actualpars()
+
 
     def actualpars(self):
         global token
