@@ -303,6 +303,7 @@ class Lexer:
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
+        self.symbol_table = SymbolTable()
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -409,11 +410,14 @@ class Parser:
             self.error("program")
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def program_block(self):
         global token
 
-        self.declarations()
+        # Enter the program scope
+        self.symbol_table.enter_scope()
 
+        self.declarations()
         self.subprograms()
 
         Quad.genQuad('begin_block', progName, '_', '_')
@@ -431,6 +435,9 @@ class Parser:
         Quad.genQuad('halt', '_', '_', '_')
         Quad.genQuad('end_block', progName, '_', '_')
 
+        # Exit the program scope
+        self.symbol_table.exit_scope()
+
     def declarations(self):
         global token
 
@@ -446,11 +453,16 @@ class Parser:
     # varlist() updates the token at the end
     # so there is no need to call get_token()
     # after varlist() is called in the code
+    # CHANGED FOR SYMBOL TABLE
     def varlist(self):
         global token
         
         if token.family == "id":
             while token.family == "id":
+                # Add variable to symbol table
+                var_name = token.recognized_string
+                self.symbol_table.add_symbol(var_name, 'variable')
+
                 token = self.get_token()
 
                 if token.recognized_string == ",":
@@ -485,12 +497,20 @@ class Parser:
             token = self.get_token()
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def func(self):
         global token
 
         if token.family == "id":
             global funcName
             funcName = token.recognized_string
+
+            # Add function to the symbol table
+            self.symbol_table.add_symbol(funcName, 'Function')
+
+            # Enter function scope
+            self.symbol_table.enter_scope()
+
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -506,16 +526,28 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
+
+            # Exit function scope
+            self.symbol_table.exit_scope()
+
         else:
             self.error("funDec")
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def proc(self):
         global token
 
         if token.family == "id":
             global procName
             procName = token.recognized_string
+
+            # Add procedure to symbol table
+            self.symbol_table.add_symbol(procName, 'Procedure')
+
+            # Enter procedure scope 
+            self.symbol_table.enter_scope()
+
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -531,14 +563,42 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
+
+            # Exit procedure scope
+            self.symbol_table.exit_scope()
+
         else:
             self.error("funDec")
 
+    #CHANGED FOR SYMBOL TABLE
     def formalparlist(self):
         global token
+        
+        if token.family == "id" or token.recognized_string.startswith('%'):
+            while True:
+                if token.recognized_string.startswith('%'):
+                    param_name = token.recognized_string[1:]  # Remove % prefix
+                    mode = 'REF'
+                    token = self.get_token()
+                else:
+                    param_name = token.recognized_string
+                    mode = 'CV'
+                    token = self.get_token()
 
-        if token.family == "id":
-            self.varlist()
+                self.symbol_table.add_symbol(
+                    name=param_name,
+                    symbol_type='parameter',
+                    parameter_mode=mode
+                )
+
+                if token.recognized_string != ",":
+                    break
+                    
+                token = self.get_token()
+                
+                # Verify next token is valid parameter
+                if not (token.family == "id" or token.recognized_string.startswith('%')):
+                    self.error("varName")
         elif token.recognized_string != ")":
             self.error("parList")
 
@@ -677,12 +737,17 @@ class Parser:
             self.error("statement")
 
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR SYMBOL TABLE
     def assignment_stat(self):
         global token
         
         var_name = token.recognized_string  # Save the variable name
         token = self.get_token()
         
+        # Check if variable exists in symbol table
+        if not self.symbol_table.lookup(var_name):
+            self.error(f"Undeclared variable: {var_name}")
+
         if token.recognized_string == ":=":
             token = self.get_token()
             
@@ -893,6 +958,7 @@ class Parser:
         Quad.genQuad('out', expr_result, '_', '_')
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def call_stat(self):
         global token
 
@@ -900,6 +966,11 @@ class Parser:
 
         if token.family == "id":
             func_name = token.recognized_string
+
+            # Check if function exists in symbol table
+            if not self.symbol_table.lookup(func_name):
+                self.error(f"Undeclared function: {func_name}")
+
             token = self.get_token()
 
             self.idtail()
@@ -953,6 +1024,10 @@ class Parser:
                 self.error("varName")
             else:
                 var_name = token.recognized_string
+                # Veridy that the variable exists
+                if not self.symbol_table.lookup(var_name):
+                    self.error(f"Undeclared variable: {var_name}")
+
                 Quad.genQuad('par', var_name, 'REF', '_')
                 token = self.get_token()
 
@@ -1226,6 +1301,85 @@ class Quad:
 
 ### =====================================================
 
+
+### =============== Symbol Table ===================
+
+class SymbolTable:
+    def __init__(self):
+        self.table = []
+        self.current_scope = 0
+        self.scope_stack = [0]
+        self.temp_counter = 0
+
+    def enter_scope(self):
+        # Enter a new scope level
+        self.current_scope += 1
+        self.scope_stack.append(self.current_scope)
+        return self.current_scope
+    
+    def exit_scope(self):
+        # Exit the current scope
+        if len(self.scope_stack) > 1: # If it's 1 then we talking about the global scope (we dont want to exit that)
+            self.scope_stack.pop()
+            self.current_scope = self.scope_stack[-1]
+        return self.current_scope
+
+    def add_symbol(self, name, symbol_type, offset = 0, parameter_mode = None, return_type = None):
+        # Add a symbol to the symbol table
+        symbol = Symbol(name, symbol_type, self.current_scope, offset = 0, parameter_mode = None, return_type = None)
+        self.table.append(symbol)
+        return symbol
+    
+    def lookup(self, name, scope = None):
+        # Look up a symbol in the symbol table. If scope = None search from current to global
+        if scope is not None:
+            for symbol in self.table:
+                if symbol.name == name and symbol.scope == scope:
+                    return symbol
+            return None
+        
+        # Search from current scope to global
+        for current_scope in reversed(self.scope_stack):
+            for symbol in self.table:
+                if symbol.name == name and symbol.scope == current_scope:
+                    return symbol
+        return None
+    
+    def new_temp(self):
+        self.temp_counter += 1
+        temp_name = f"t@{self.temp_counter}"
+        self.add_symbol(temp_name, 'temp')
+        return temp_name
+
+    def print_table(self):
+        # FOR DEBUGGING
+        print("\n===== SYMBOL TABLE =====")
+        for symbol in self.table:
+            print(f"Name: {symbol.name}, Type: {symbol.symbol_type}, Scope: {symbol.scope}")
+            if symbol.symbol_type in ['Function', 'Procedure'] and symbol.parameters is not None:
+                print(f"  Parameters: {symbol.parameters}")
+            if symbol.symbol_type == 'Function' and symbol.return_type is not None:
+                print(f"  Return Type: {symbol.return_type}")
+        print("=======================\n")
+
+### =====================================================
+
+
+### =============== Symbol Class ===================
+
+class Symbol:
+    def __init__(self, name, symbol_type, scope, offset = 0, parameter_mode = None, return_type = None):
+        self.name = name
+        self.symbol_type = symbol_type
+        self.scope = scope
+        self.offset = offset
+        self.parameter_mode = parameter_mode
+        self.return_type = return_type
+        self.parameters = [] if symbol_type in ['Function', 'Procedure'] else None
+
+### =====================================================
+
+
 def main():
     start = timer()
     lexer = Lexer(source_file)
@@ -1233,13 +1387,15 @@ def main():
     parser = Parser(lexer)
     parser.syntax_analyzer()
 
-    fd = open(progName + ".int", "w", encoding="utf-8") # Encoding for greek letters
+    parser.symbol_table.print_table()
 
-    for quad in interCode:
-        fd.write(str(quad) + "\n")
-        # print(quad)
+    # fd = open(progName + ".int", "w", encoding="utf-8") # Encoding for greek letters
 
-    fd.close()
+    # for quad in interCode:
+    #     fd.write(str(quad) + "\n")
+    #     # print(quad)
+
+    # fd.close()
 
     end = timer()
     print("Compiled successfuly in: {:.4f} seconds".format(end - start))
