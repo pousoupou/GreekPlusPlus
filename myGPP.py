@@ -174,7 +174,7 @@ class Lexer:
                     char = current_line[self.line_index]
                     category = categorize(char)
 
-                if int(current_string) < -99999 or int(current_string) > 99999:
+                if int(current_string) < -32767 or int(current_string) > 32767:
                     self.error("numberRange")
 
                 family = "number"
@@ -230,13 +230,6 @@ class Lexer:
                     break
                 else:
                     self.error("assign")
-
-            elif category == "equal":
-                current_string += char
-                self.line_index += 1
-
-                family = "relationalOperator"
-                break
             
             elif category == "group":
                 current_string += char
@@ -303,6 +296,19 @@ class Lexer:
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
+        self.quad_list = QuadList()
+        self.temp_counter = 1
+        self.label_counter = 1
+
+        # FOR SYMBOL TABLE
+        self.symbol_table = SymbolTable()
+        self.current_scope = "global"
+        self.symbol_table.open_scope("global") # open global scope immediatelly
+
+    def new_temp(self):
+        temp = f"t_{self.temp_counter}"
+        self.temp_counter += 1
+        return temp
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -399,8 +405,7 @@ class Parser:
             token = self.get_token()
             
             if token.family == "id":
-                global progName
-                progName = token.recognized_string #Store the name to use later
+                self.program_name = token.recognized_string #Store the name to use later
                 token = self.get_token()
                 self.program_block()
             else:
@@ -416,7 +421,7 @@ class Parser:
 
         self.subprograms()
 
-        Quad.genQuad('begin_block', progName, '_', '_')
+        self.quad_list.genQuad('begin_block,', self.program_name , '_', '_')
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -428,8 +433,8 @@ class Parser:
         if token.recognized_string != "τέλος_προγράμματος":
             self.error("end")
 
-        Quad.genQuad('halt', '_', '_', '_')
-        Quad.genQuad('end_block', progName, '_', '_')
+        self.quad_list.genQuad('halt,', '_', '_', '_')
+        self.quad_list.genQuad('end_block,', self.program_name, '_', '_')
 
     def declarations(self):
         global token
@@ -438,7 +443,7 @@ class Parser:
             while token.recognized_string == "δήλωση":
                 token = self.get_token()
             
-                self.varlist()
+            self.varlist()
         
         elif token.recognized_string not in keywords:
             self.error("varDecl")
@@ -489,8 +494,7 @@ class Parser:
         global token
 
         if token.family == "id":
-            global funcName
-            funcName = token.recognized_string
+            self.func_name = token.recognized_string
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -514,8 +518,7 @@ class Parser:
         global token
 
         if token.family == "id":
-            global procName
-            procName = token.recognized_string
+            self.proc_name = token.recognized_string
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -555,7 +558,7 @@ class Parser:
 
             self.subprograms()
 
-            Quad.genQuad('begin_block', funcName, '_', '_')
+            self.quad_list.genQuad('begin_block,', self.func_name, '_', '_')
 
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
@@ -568,7 +571,7 @@ class Parser:
             else:
                 self.error("func-start")
 
-            Quad.genQuad('end_block', funcName, '_', '_')
+            self.quad_list.genQuad('end_block,', self.func_name, '_', '_')
 
         else:
             self.error("func-interface")
@@ -585,7 +588,7 @@ class Parser:
 
             self.subprograms()
 
-            Quad.genQuad('begin_block', procName, '_', '_')
+            self.quad_list.genQuad('begin_block,', self.proc_name, '_', '_')
 
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
@@ -597,7 +600,7 @@ class Parser:
             else:
                 self.error("proc-start")
 
-            Quad.genQuad('end_block', procName, '_', '_')
+            self.quad_list.genQuad('end_block,', self.proc_name,'_', '_')
 
         else:
             self.error("proc-interface")
@@ -688,7 +691,7 @@ class Parser:
             
             expr_place = self.expression()
             # Generate assignment quad
-            Quad.genQuad(':=', expr_place, '_', var_name)
+            self.quad_list.genQuad(':=,', expr_place, '_', var_name)
         else:
             self.error("assign")
 
@@ -697,32 +700,31 @@ class Parser:
         global token
         token = self.get_token()
         
-        # Evaluate the condition
-        trueList, falseList = self.condition()
-
-        # Backpatch true jumps to then-block
-        Quad.backPatch(trueList, Quad.nextQuad())
+        condition_temp = self.condition()
+        
+        false_list = QuadPointerList()
+        false_list.add(self.quad_list.nextQuad())
+        self.quad_list.genQuad('jump,', '_', '_', condition_temp)
 
         if token.recognized_string == "τότε":
             token = self.get_token()
             
-            # Process the then-block
             self.sequence()
             
             # Create jump to skip else-block (will be backpatched to end of if)
-            after_then_jump = Quad.makeList(Quad.nextQuad())
-            Quad.genQuad('jump', '_', '_', '_')
+            after_then_jump = QuadPointerList()
+            after_then_jump.add(self.quad_list.nextQuad())
+            self.quad_list.genQuad('jump,', '_', '_', '_')
             
             # Backpatch false jumps to else-block
-            else_label = Quad.nextQuad()
-            Quad.backPatch(falseList, else_label)
+            else_label = self.quad_list.nextQuad()
+            self.quad_list.backPatch(false_list, else_label)
 
-            # Process the else-block statements
             self.elsepart()
 
             # Backpatch jumps after then-block to end of if
-            end_label = Quad.nextQuad()
-            Quad.backPatch(after_then_jump, end_label)
+            end_label = self.quad_list.nextQuad()
+            self.quad_list.backPatch(after_then_jump, end_label)
 
             if token.recognized_string != "εάν_τέλος":
                 self.error("if-end")
@@ -744,27 +746,26 @@ class Parser:
         global token
         token = self.get_token()
 
-        #Start label for the loop
-        start_label = Quad.nextQuad()
+        #Start label
+        start_label = self.quad_list.nextQuad()
+        condition_result = self.condition()
 
-        # Evaluate the condtion
-        trueList, falseList = self.condition()
-
-        # Backpatch true jumps to loop body
-        Quad.backPatch(trueList, Quad.nextQuad())
+        #QuadPointerList because we dont know the end_label yet
+        false_list = QuadPointerList()
+        false_jump_quad = self.quad_list.genQuad('jump,', '_', '_', condition_result)
+        false_list.add(false_jump_quad)
 
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
 
-            # Process the loop body
             self.sequence()
 
-            # Jump back to condition evaluation 
-            Quad.genQuad('jump', '_', '_', start_label)
+            self.quad_list.genQuad('jump,', '_', '_', start_label)
 
-            # Backpatch false jumps to exit the loop
-            end_label = Quad.nextQuad()
-            Quad.backPatch(falseList, end_label)
+            end_label = self.quad_list.nextQuad()
+
+            #BackPatch till after the loop
+            self.quad_list.backPatch(false_list, end_label)
 
             if token.recognized_string != "όσο_τέλος":
                 self.error("while-end")
@@ -779,23 +780,20 @@ class Parser:
         token = self.get_token()
 
         #Label for the start of the loop
-        start_label = Quad.nextQuad()
+        start_label = self.quad_list.nextQuad()
 
-        # Process the loop body
         self.sequence()
 
         if token.recognized_string == "μέχρι":
             token = self.get_token()
+
             
-            # Evaluate the condition. False -> continue loop
-            trueList, falseList = self.condition()
+            condition_result = self.condition()
+            temp_result = self.new_temp()
 
-            # Backpatch false jumps to the start of the loop
-            Quad.backPatch(falseList, start_label)
+            #Jump back at the start if the condition is false
+            self.quad_list.genQuad('jump,', '_', '_', start_label)
 
-            # Backpatch true jumps to exit the loop
-            end_label = Quad.nextQuad()
-            Quad.backPatch(trueList, end_label)
         else:
             self.error("do-end")
 
@@ -812,7 +810,7 @@ class Parser:
                 token = self.get_token()
 
                 initial_value = self.expression()
-                Quad.genQuad(':=', initial_value, '_', counter_var)
+                self.quad_list.genQuad(':=,', initial_value, '_', counter_var)
 
                 if token.recognized_string == "έως":
                     token = self.get_token()
@@ -823,33 +821,29 @@ class Parser:
                         token = self.get_token()
                         step_value = self.expression()
 
-                    # Start of the loop
-                    start_label = Quad.nextQuad()
+                    start_label = self.quad_list.nextQuad()
                     
-                    # Condition check
-                    temp = Quad.newTemp()
-                    Quad.genQuad('<=', counter_var, final_value, temp)
+                    comparison_temp = self.new_temp()
                     
-                    # Create jump for loop exit
-                    exit_list = Quad.makeList(Quad.nextQuad())
-                    exit_list.append(Quad.genQuad('jump', '_', '_', temp))
+                    self.quad_list.genQuad('<=,', counter_var, final_value, comparison_temp)
+                    
+                    exit_list = QuadPointerList()
+                    exit_list.add(self.quad_list.nextQuad())
+                    self.quad_list.genQuad('jump,', '_', '_', comparison_temp)
 
                     if token.recognized_string == "επανάλαβε":
                         token = self.get_token()
 
                         self.sequence()
 
-                        # Increment counter
-                        increment_temp = Quad.newTemp()
-                        Quad.genQuad('+', counter_var, step_value, increment_temp)
-                        Quad.genQuad(':=', increment_temp, '_', counter_var)
+                        increment_temp = self.new_temp()
+                        self.quad_list.genQuad('+,', counter_var, step_value, increment_temp)
+                        self.quad_list.genQuad(':=,', increment_temp, '_', counter_var)
                         
-                        # Jump back to condition check
-                        Quad.genQuad('jump', '_', '_', start_label)
+                        self.quad_list.genQuad('jump,', '_', '_', start_label)
                         
-                        # Backpatch exit jumps
-                        exit_label = Quad.nextQuad()
-                        Quad.backPatch(exit_list, exit_label)
+                        exit_label = self.quad_list.nextQuad()
+                        self.quad_list.backPatch(exit_list, exit_label)
 
                         if token.recognized_string != "για_τέλος":
                             self.error("for-end")
@@ -879,7 +873,7 @@ class Parser:
 
         if token.family == "id":
             in_var = token.recognized_string
-            Quad.genQuad('in', in_var, '_', '_')
+            self.quad_list.genQuad('in,', in_var, '_', '_')
             token = self.get_token()
         else:
             self.error("varName")
@@ -890,7 +884,7 @@ class Parser:
         token = self.get_token()
 
         expr_result = self.expression()
-        Quad.genQuad('out', expr_result, '_', '_')
+        self.quad_list.genQuad('out,', expr_result, '_', '_')
 
     #CHANGED FOR INTERMEDIATE CODE
     def call_stat(self):
@@ -904,7 +898,7 @@ class Parser:
 
             self.idtail()
 
-            Quad.genQuad('call', func_name, '_', '_')
+            self.quad_list.genQuad('call,', func_name, '_', '_')
         else:
             self.error("funDec")
 
@@ -945,7 +939,7 @@ class Parser:
         if token.recognized_string != "%":
             # (CV)
             expr_place = self.expression()
-            Quad.genQuad('par', expr_place, 'CV', '_')
+            self.quad_list.genQuad('par,', expr_place, 'CV', '_')
         else:
             # (REF)
             token = self.get_token()
@@ -953,7 +947,7 @@ class Parser:
                 self.error("varName")
             else:
                 var_name = token.recognized_string
-                Quad.genQuad('par', var_name, 'REF', '_')
+                self.quad_list.genQuad('par,', var_name, 'REF', '_')
                 token = self.get_token()
 
     # condition() updates the token at the end
@@ -962,50 +956,36 @@ class Parser:
     def condition(self):
         global token
 
-        # Get the first boolterm
-        trueList, falseList = self.boolterm()
+        bool_term_result = self.boolterm()
 
         while token.recognized_string == "ή":
             token = self.get_token()
 
-            # If previous is false then continue to the next term
-            Quad.backPatch(falseList, Quad.nextQuad())
-            
-            # Evaluate the next term
-            next_trueList, next_falseList = self.boolterm()
+            second_term = self.boolterm()
 
-            # If anything from the first or second term is true then the expression is true
-            trueList = Quad.merge(trueList, next_trueList)
+            #Generate quad for OR
+            temp_result = self.quad_list.nextQuad() + 2
+            self.quad_list.genQuad('or,', bool_term_result, second_term, temp_result)
 
-            # If both terms are false then the expression is false
-            falseList = next_falseList
-
-        return (trueList, falseList)
+        return bool_term_result
 
     # boolterm() also updates the token at the end
     #CHANGED FOR INTERMEDIATE CODE
     def boolterm(self):
         global token
 
-        # First boolean factor
-        trueList, falseList = self.boolfactor()
-
-        while(token.recognized_string == "και"):
+        bool_factor_result = self.boolfactor()
+        while token.recognized_string == "και":
             token = self.get_token()
 
-            # Backpatch previous trueList to current position (so if previous is true, continue)
-            Quad.backPatch(trueList, Quad.nextQuad())
+            second_factor = self.boolfactor()
 
-            # Evaluate the next factor
-            next_trueList, next_falseList = self.boolfactor()
+            #Generate quad for AND
+            temp_result = self.quad_list.nextQuad() + 2
+            self.quad_list.genQuad('and,', bool_factor_result, second_factor, temp_result)
+            bool_factor_result = temp_result
 
-            # If anything from the first factor is false then the whole expression is false
-            falseList = Quad.merge(falseList, next_falseList)
-
-            # If the first one is true then check the next
-            trueList = next_trueList
-
-        return (trueList, falseList)
+        return bool_factor_result
 
     # CHANGED FOR INTERMEDIATE CODE
     def boolfactor(self):
@@ -1018,45 +998,46 @@ class Parser:
                 token = self.get_token()
 
                 #Get the condition result
-                trueList, falseList = self.condition()
+                condition_result = self.condition()
+
+                #Generate the quad for the NOT (boolfactor -> NOT [ condition ])
+                temp_result = self.quad_list.nextQuad() + 2
+                self.quad_list.genQuad('not,', condition_result, '_', temp_result)
                 
                 if token.recognized_string != "]":
                     self.error("sqBracketsClose")
                 else:
                     token = self.get_token()
-                    return(falseList, trueList) # SWAP BECAUSE OF NOT
-                            
+
+                return temp_result
+            
             else:
                 self.error("sqBracketsOpen")
 
         elif token.recognized_string == "[":
             token = self.get_token()
 
-            # Get the condition result
-            trueList, falseList = self.condition()
+            #Get the condition result
+            condition_result = self.condition()
 
             if token.recognized_string != "]":
                 self.error("sqBracketsClose")
             else:
                 token = self.get_token()
 
-            return (trueList, falseList)
+            return condition_result
 
         else:
             left_expr = self.expression()
             rel_op = token.recognized_string
-            token = self.get_token()
+            self.relational_oper()
             right_expr = self.expression()
 
             #Generate the quad for relational operation
-            trueList = Quad.makeList(Quad.nextQuad())
-            Quad.genQuad(rel_op, left_expr, right_expr, '_')
+            temp_result = self.quad_list.nextQuad() + 2
+            self.quad_list.genQuad(rel_op, left_expr, right_expr, temp_result)
 
-            # Create false list for the jump after the expression
-            falseList = Quad.makeList(Quad.nextQuad())
-            Quad.genQuad('jump', '_', '_', '_')
-
-            return (trueList, falseList)
+            return temp_result
 
     # expression() also updates the token at the end
     # CHANGED FOR INTERMEDIATE CODE
@@ -1076,8 +1057,8 @@ class Parser:
             second_operand = self.term()
             
             # Generate quad for the addition/subtraction
-            temp_result = Quad.newTemp()
-            Quad.genQuad(op, first_operand, second_operand, temp_result)
+            temp_result = self.new_temp()
+            self.quad_list.genQuad(op, first_operand, second_operand, temp_result)
             first_operand = temp_result  # Update first_operand for chained operations
         
         return first_operand
@@ -1098,8 +1079,8 @@ class Parser:
             second_operand = self.factor()
             
             # Generate quad for the multiplication/division
-            temp_result = Quad.newTemp()
-            Quad.genQuad(op, first_operand, second_operand, temp_result)
+            temp_result = self.new_temp()
+            self.quad_list.genQuad(op, first_operand, second_operand, temp_result)
             first_operand = temp_result  # Update first_operand for chained operations
             
         return first_operand
@@ -1108,23 +1089,6 @@ class Parser:
     def factor(self):
         global token
         
-        # Handle optional sign (+ or -)
-        if token.family == "addOperator":
-            op = token.recognized_string
-            token = self.get_token()
-
-            # Get the operand
-            operand = self.factor()
-
-            # Handle the -
-            if op == '-':
-                temp = Quad.newTemp()
-                Quad.genQuad('-', '0', operand, temp) # The -α is (0 - α)
-                return temp
-            
-            # Just return the operand if it's +
-            return operand
-
         if token.family == "number":
             operand = token.recognized_string
             token = self.get_token()
@@ -1149,7 +1113,7 @@ class Parser:
             
             # Function or procedure call (it has '(' )
             if token.recognized_string == "(":
-                temp = Quad.newTemp()
+                temp = self.new_temp()
                 self.idtail()
                 return temp
                 
@@ -1165,66 +1129,200 @@ class Parser:
         
 ### ==================================
 
-### =============== Intermediary Code ===================
 
-label = 0
-temp = 0
-interCode = []
-
+### ============= Quad =============
+# Represents each quad, for example -> (1: + a b c)
 class Quad:
-    def __init__(self, op, arg1, arg2, arg3):
-        self.op = op
-        self.arg1 = arg1
-        self.arg2 = arg2
-        self.arg3 = arg3
-        global label
-        label += 1
+    def __init__(self, label, op, op1, op2, op3):
         self.label = label
+        self.op = op
+        self.op1 = op1
+        self.op2 = op2
+        self.op3 = op3
 
     def __str__(self):
-        return f"{self.label} : {self.op} , {self.arg1} , {self.arg2} , {self.arg3}"
-    
-    @staticmethod
-    def nextQuad():
-        global label
-        return label + 1
-    
-    @staticmethod
-    def genQuad(op, arg1, arg2, arg3):
-        quad = Quad(op, arg1, arg2, arg3)
+        return f"{self.label}: {self.op}, {self.op1}, {self.op2}, {self.op3}"
 
-        global interCode
-        interCode.append(quad)
+### ==================================
 
+### ============= QuadPointer =============
+# Used for the label of the quad, for example -> (1)
+class QuadPointer:
+    def __init__(self, label):
+        self.label = label
+    
+    def __str__(self):
+        return f"{self.label}"
+
+### ==================================
+
+### ============= QuadList =============
+# Represents a list of quads an also holds the number of quads that have been created so far
+class QuadList:
+    def __init__(self):
+        self.programList = []
+        self.quad_counter = 1
+        self.label_counter = 1
+
+    def new_label(self):
+        label = self.label_counter
+        self.label_counter += 1
+        return label
+
+    def __str__(self):
+        quad_strings = []
+        for quad in self.programList:
+            quad_strings.append(f"{quad.label}: {quad.op} {quad.op1} , {quad.op2} , {quad.op3}")
+        return "\n".join(quad_strings)
+
+    # Returns the next available quad number
+    def nextQuad(self):
+        return self.quad_counter
+    
+    # Generates a new quad and adds it to the program list
+    def genQuad(self, op, op1, op2, op3):
+        quad = Quad(
+            label = self.quad_counter,
+            op = op,
+            op1 = op1,
+            op2 = op2,
+            op3 = op3
+        )
+
+        self.programList.append(quad)
+        self.quad_counter += 1
         return quad.label
-    
-    @staticmethod
-    def newTemp():
-        global temp
-        temp += 1
 
-        return f"t@{temp}"
 
-    @staticmethod
-    def emptyList():
-        return []
-    
-    @staticmethod
-    def makeList(quad_label):
-        return [quad_label]
-    
-    @staticmethod
-    def merge(list1, list2):
-        return list1 + list2
-    
-    @staticmethod
-    def backPatch(label_list, target_label):
-        global interCode
-        for quad in interCode:
-            if quad.label in label_list:
-                quad.arg3 = target_label
+    # For each quad in list, we put label as op3
+    # For example -> If list hold the quads [100, 102] then the "output" will be:
+    # 100: jump,, _, _, 104
+    # 101: +, a, 1, a
+    # 102: jump,, _, _, 104
+    # 103: +, a, 2, a
+    def backPatch(self, quad_list, target_label):
+        for quad_ptr in quad_list.labelList:
+            quad_num = int(quad_ptr.label)        
+            self.programList[quad_num - 1].op3 = target_label
 
-### =====================================================
+### ==================================
+
+### ============= QuadPointerList =============
+class QuadPointerList:
+    def __init__(self):
+        self.labelList = []
+
+    def __str__(self):
+        return ",".join(str(qp) for qp in self.labelList)
+
+    def add(self, label):
+        self.labelList.append(QuadPointer(label))
+
+    def merge(self, other_list):
+        merged = QuadPointerList()
+        merged.labelList = self.labelList + other_list.labelList
+        return merged
+
+### ==================================
+
+### ============= Symbol =============
+class Symbol:
+    def __init__(self, name, kind, data_type, offset, param_mode):
+        self.name = name
+        self.kind = kind
+        self.data_type = data_type # Here only integers allowed
+        self.offset = offset
+        self.param_mode = param_mode # CV or REF
+        
+    def __str__(self):
+        return f"Name: {self.name}, Kind: {self.kind}, Type: {self.data_type}, Offset: {self.offset}, Parameter Mode: {self.param_mode}"
+
+### ==================================
+
+
+### ============= Scope =============
+class Scope:
+    def __init__(self, name, nesting_level):
+        self.name = name
+        self.nesting_level = nesting_level
+        self.symbols = {}
+        self.offset = 12
+
+    def __str__(self):
+        symbols_str = "\n\t".join([str(symbol) for symbol in self.symbols.values()])
+        return f"Scope: {self.name}, Nesting Level: {self.nesting_level}\n\t{symbols_str}"
+    
+    def add_symbol(self, symbol):
+        # Symbol already exists in this scope
+        if symbol.name in self.symbols:
+            return False
+        
+        if symbol.kind == 'variable' or symbol.kind == 'parameter':
+            symbol.offset = self.offset
+            self.offset += 4 # We only have integers (4 bytes)
+
+        self.symbols[symbol.name] = symbol
+        return True
+    
+    def lookup(self, name):
+        return self.symbols.get(name)
+
+### ==================================
+
+
+### ============= SymbolTable =============
+class SymbolTable:
+    def __init__(self):
+        self.scopes = []
+        self.current_scope = None
+        self.temp_counter = 1
+
+    def __str__(self):
+        return "\n".join([str(scope) for scope in self.scopes])
+
+
+    def open_scope(self, name):
+        nesting_level = 0 if not self.scopes else self.current_scope.nesting_level + 1
+        new_scope = Scope(name, nesting_level)
+        self.scopes.append(new_scope)
+        self.current_scope = new_scope
+        return new_scope
+
+    def close_scope(self):
+        if self.scopes:
+            closed_scope = self.current_scope
+            self.scopes.pop()
+            self.current_scope = self.scopes[-1] if self.scopes else None
+            return closed_scope
+        return None
+    
+    def add_symbol(self, name, kind, data_type=None, parameter_mode=None):
+        if not self.current_scope:
+            return False
+        
+        symbol = Symbol(name, kind, data_type, parameter_mode)
+        return self.current_scope.add_symbol(symbol)
+    
+    def lookup(self, name, current_scope_only=False):
+        if not self.scopes:
+            return None
+        
+        # Check current scope first
+        symbol = self.current_scope.lookup(name)
+        if symbol or current_scope_only:
+            return symbol
+        
+        # If not found and we're allowed to check parent scopes
+        for scope in reversed(self.scopes[:-1]):
+            symbol = scope.lookup(name)
+            if symbol:
+                return symbol
+        
+        return None
+    
+### ==================================
+
+
 
 def main():
     start = timer()
@@ -1233,13 +1331,9 @@ def main():
     parser = Parser(lexer)
     parser.syntax_analyzer()
 
-    fd = open(progName + ".int", "w", encoding="utf-8") # Encoding for greek letters
-
-    for quad in interCode:
-        fd.write(str(quad) + "\n")
-        # print(quad)
-
-    fd.close()
+    # Print generated quads
+    print("\nGenerated Intermediate Code:")
+    print(parser.quad_list)
 
     end = timer()
     print("Compiled successfuly in: {:.4f} seconds".format(end - start))
