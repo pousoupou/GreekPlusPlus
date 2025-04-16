@@ -174,7 +174,7 @@ class Lexer:
                     char = current_line[self.line_index]
                     category = categorize(char)
 
-                if int(current_string) < -32767 or int(current_string) > 32767:
+                if int(current_string) < -99999 or int(current_string) > 99999:
                     self.error("numberRange")
 
                 family = "number"
@@ -697,24 +697,27 @@ class Parser:
         global token
         token = self.get_token()
         
-        condition_temp = self.condition()
-        
-        false_list = Quad.emptyList()
-        false_list.append(Quad.genQuad('jump', '_', '_', condition_temp))
+        # Evaluate the condition
+        trueList, falseList = self.condition()
+
+        # Backpatch true jumps to then-block
+        Quad.backPatch(trueList, Quad.nextQuad())
 
         if token.recognized_string == "τότε":
             token = self.get_token()
             
+            # Process the then-block
             self.sequence()
             
             # Create jump to skip else-block (will be backpatched to end of if)
-            after_then_jump = Quad.emptyList()
-            after_then_jump.append(Quad.genQuad('jump', '_', '_', '_'))
+            after_then_jump = Quad.makeList(Quad.nextQuad())
+            Quad.genQuad('jump', '_', '_', '_')
             
             # Backpatch false jumps to else-block
             else_label = Quad.nextQuad()
-            Quad.backPatch(false_list, else_label)
+            Quad.backPatch(falseList, else_label)
 
+            # Process the else-block statements
             self.elsepart()
 
             # Backpatch jumps after then-block to end of if
@@ -741,24 +744,27 @@ class Parser:
         global token
         token = self.get_token()
 
-        #Start label
+        #Start label for the loop
         start_label = Quad.nextQuad()
-        condition_result = self.condition()
 
-        false_list = Quad.emptyList()
-        false_list.append(Quad.genQuad('jump', '_', '_', condition_result))
+        # Evaluate the condtion
+        trueList, falseList = self.condition()
+
+        # Backpatch true jumps to loop body
+        Quad.backPatch(trueList, Quad.nextQuad())
 
         if token.recognized_string == "επανάλαβε":
             token = self.get_token()
 
+            # Process the loop body
             self.sequence()
 
+            # Jump back to condition evaluation 
             Quad.genQuad('jump', '_', '_', start_label)
 
+            # Backpatch false jumps to exit the loop
             end_label = Quad.nextQuad()
-
-            #BackPatch till after the loop
-            Quad.backPatch(false_list, end_label)
+            Quad.backPatch(falseList, end_label)
 
             if token.recognized_string != "όσο_τέλος":
                 self.error("while-end")
@@ -775,18 +781,22 @@ class Parser:
         #Label for the start of the loop
         start_label = Quad.nextQuad()
 
+        # Process the loop body
         self.sequence()
 
         if token.recognized_string == "μέχρι":
             token = self.get_token()
-
             
-            condition_result = self.condition()
-            temp_result = Quad.newTemp()
 
-            #Jump back at the start if the condition is false
-            Quad.genQuad('jump', '_', '_', start_label)
+            # Evaluate the condition. False -> continue loop
+            trueList, falseList = self.condition()
 
+            # Backpatch false jumps to the start of the loop
+            Quad.backPatch(falseList, start_label)
+
+            # Backpatch true jumps to exit the loop
+            end_label = Quad.nextQuad()
+            Quad.backPatch(trueList, end_label)
         else:
             self.error("do-end")
 
@@ -814,26 +824,30 @@ class Parser:
                         token = self.get_token()
                         step_value = self.expression()
 
+                    # Start of the loop
                     start_label = Quad.nextQuad()
                     
-                    comparison_temp = Quad.newTemp()
+                    # Condition check
+                    temp = Quad.newTemp()
+                    Quad.genQuad('<=', counter_var, final_value, temp)
                     
-                    Quad.genQuad('<=', counter_var, final_value, comparison_temp)
-                    
-                    exit_list = Quad.emptyList()
-                    exit_list.append(Quad.genQuad('jump', '_', '_', comparison_temp))
+                    # Create jump for loop exit
+                    exit_list = Quad.makeList(Quad.nextQuad())
+                    exit_list.append(Quad.genQuad('jump', '_', '_', temp))
 
                     if token.recognized_string == "επανάλαβε":
                         token = self.get_token()
 
                         self.sequence()
-
+        
                         increment_temp = Quad.newTemp()
                         Quad.genQuad('+', counter_var, step_value, increment_temp)
                         Quad.genQuad(':=', increment_temp, '_', counter_var)
                         
+                        # Jump back to condition check
                         Quad.genQuad('jump', '_', '_', start_label)
                         
+                        # Backpatch exit jumps
                         exit_label = Quad.nextQuad()
                         Quad.backPatch(exit_list, exit_label)
 
@@ -948,36 +962,50 @@ class Parser:
     def condition(self):
         global token
 
-        bool_term_result = self.boolterm()
+        # Get the first boolterm
+        trueList, falseList = self.boolterm()
 
         while token.recognized_string == "ή":
             token = self.get_token()
 
-            second_term = self.boolterm()
+            # If previous is false then continue to the next term
+            Quad.backPatch(falseList, Quad.nextQuad())
+            
+            # Evaluate the next term
+            next_trueList, next_falseList = self.boolterm()
 
-            #Generate quad for OR
-            temp_result =  + 2
-            Quad.genQuad('or', bool_term_result, second_term, temp_result)
+            # If anything from the first or second term is true then the expression is true
+            trueList = Quad.merge(trueList, next_trueList)
 
-        return bool_term_result
+            # If both terms are false then the expression is false
+            falseList = next_falseList
+
+        return (trueList, falseList)
 
     # boolterm() also updates the token at the end
     #CHANGED FOR INTERMEDIATE CODE
     def boolterm(self):
         global token
 
-        bool_factor_result = self.boolfactor()
-        while token.recognized_string == "και":
+        # First boolean factor
+        trueList, falseList = self.boolfactor()
+
+        while(token.recognized_string == "και"):
             token = self.get_token()
 
-            second_factor = self.boolfactor()
+            # Backpatch previous trueList to current position (so if previous is true, continue)
+            Quad.backPatch(trueList, Quad.nextQuad())
 
-            #Generate quad for AND
-            temp_result =  + 2
-            Quad.genQuad('and', bool_factor_result, second_factor, temp_result)
-            bool_factor_result = temp_result
+            # Evaluate the next factor
+            next_trueList, next_falseList = self.boolfactor()
 
-        return bool_factor_result
+            # If anything from the first factor is false then the whole expression is false
+            falseList = Quad.merge(falseList, next_falseList)
+
+            # If the first one is true then check the next
+            trueList = next_trueList
+
+        return (trueList, falseList)
 
     # CHANGED FOR INTERMEDIATE CODE
     def boolfactor(self):
@@ -990,46 +1018,45 @@ class Parser:
                 token = self.get_token()
 
                 #Get the condition result
-                condition_result = self.condition()
-
-                #Generate the quad for the NOT (boolfactor -> NOT [ condition ])
-                temp_result =  + 2
-                Quad.genQuad('not', condition_result, '_', temp_result)
+                trueList, falseList = self.condition()
                 
                 if token.recognized_string != "]":
                     self.error("sqBracketsClose")
                 else:
                     token = self.get_token()
-
-                return temp_result
-            
+                    return(falseList, trueList) # SWAP BECAUSE OF NOT
+                            
             else:
                 self.error("sqBracketsOpen")
 
         elif token.recognized_string == "[":
             token = self.get_token()
 
-            #Get the condition result
-            condition_result = self.condition()
+            # Get the condition result
+            trueList, falseList = self.condition()
 
             if token.recognized_string != "]":
                 self.error("sqBracketsClose")
             else:
                 token = self.get_token()
 
-            return condition_result
+            return (trueList, falseList)
 
         else:
             left_expr = self.expression()
             rel_op = token.recognized_string
-            self.relational_oper()
+            token = self.get_token()
             right_expr = self.expression()
 
             #Generate the quad for relational operation
-            temp_result =  + 2
-            Quad.genQuad(rel_op, left_expr, right_expr, temp_result)
+            trueList = Quad.makeList(Quad.nextQuad())
+            Quad.genQuad(rel_op, left_expr, right_expr, '_')
 
-            return temp_result
+            # Create false list for the jump after the expression
+            falseList = Quad.makeList(Quad.nextQuad())
+            Quad.genQuad('jump', '_', '_', '_')
+
+            return (trueList, falseList)
 
     # expression() also updates the token at the end
     # CHANGED FOR INTERMEDIATE CODE
@@ -1081,6 +1108,23 @@ class Parser:
     def factor(self):
         global token
         
+        # Handle optional sign (+ or -)
+        if token.family == "addOperator":
+            op = token.recognized_string
+            token = self.get_token()
+
+            # Get the operand
+            operand = self.factor()
+
+            # Handle the -
+            if op == '-':
+                temp = Quad.newTemp()
+                Quad.genQuad('-', '0', operand, temp) # The -α is (0 - α)
+                return temp
+            
+            # Just return the operand if it's +
+            return operand
+
         if token.family == "number":
             operand = token.recognized_string
             token = self.get_token()
@@ -1152,31 +1196,33 @@ class Quad:
         global interCode
         interCode.append(quad)
 
-        return quad
+        return quad.label
     
     @staticmethod
     def newTemp():
         global temp
         temp += 1
 
-        return f"T@{temp}"
+        return f"t@{temp}"
 
     @staticmethod
     def emptyList():
         return []
     
     @staticmethod
-    def makeList(quad):
-        return [quad]
+    def makeList(quad_label):
+        return [quad_label]
     
     @staticmethod
     def merge(list1, list2):
         return list1 + list2
     
     @staticmethod
-    def backPatch(list, z):
-        for quad in list:
-            quad.arg3 = z
+    def backPatch(label_list, target_label):
+        global interCode
+        for quad in interCode:
+            if quad.label in label_list:
+                quad.arg3 = target_label
 
 ### =====================================================
 
@@ -1187,7 +1233,7 @@ def main():
     parser = Parser(lexer)
     parser.syntax_analyzer()
 
-    fd = open(progName + ".int", "w")
+    fd = open(progName + ".int", "w", encoding="utf-8") # Encoding for greek letters
 
     for quad in interCode:
         fd.write(str(quad) + "\n")

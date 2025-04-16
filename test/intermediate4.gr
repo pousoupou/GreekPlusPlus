@@ -1,4 +1,4 @@
-πρόγραμμα τεστ
+πρόγραμμα τεστ4
     δήλωση age,creditScore,income
 
     αρχή_προγράμματος
@@ -9,7 +9,7 @@
     εάν [age >= 18 και age <= 65] και 
         [[income >= 20000 και creditScore >= 650] ή 
          [income >= 10000] ή 
-         [creditScore >= 700 και income >= 15000]] τότε
+         [creditScore >= 700 και income >= 10000]] τότε
         γράψε 1
     αλλιώς
         γράψε 0
