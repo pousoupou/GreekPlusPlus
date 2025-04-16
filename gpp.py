@@ -787,6 +787,7 @@ class Parser:
         if token.recognized_string == "μέχρι":
             token = self.get_token()
             
+
             # Evaluate the condition. False -> continue loop
             trueList, falseList = self.condition()
 
@@ -838,8 +839,7 @@ class Parser:
                         token = self.get_token()
 
                         self.sequence()
-
-                        # Increment counter
+        
                         increment_temp = Quad.newTemp()
                         Quad.genQuad('+', counter_var, step_value, increment_temp)
                         Quad.genQuad(':=', increment_temp, '_', counter_var)
