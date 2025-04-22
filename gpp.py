@@ -303,6 +303,7 @@ class Lexer:
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
+        self.sym_table = SymbolTable()
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -396,6 +397,9 @@ class Parser:
         global token
         
         if token.recognized_string == "πρόγραμμα":
+            glob = Scope()
+            self.sym_table.add(nesting_level, glob)
+
             token = self.get_token()
             
             if token.family == "id":
@@ -450,7 +454,12 @@ class Parser:
         global token
         
         if token.family == "id":
+            scope = self.sym_table.get(nesting_level)
+
             while token.family == "id":
+                var = Entity(token.recognized_string)
+                scope.addEntity(var)
+
                 token = self.get_token()
 
                 if token.recognized_string == ",":
@@ -472,6 +481,9 @@ class Parser:
         global token
 
         while token.recognized_string == "συνάρτηση" or token.recognized_string == "διαδικασία":
+            scope = Scope()
+            self.sym_table.add(nesting_level, scope)
+
             if token.recognized_string == "συνάρτηση":
                 token = self.get_token()
 
@@ -555,7 +567,9 @@ class Parser:
 
             self.subprograms()
 
-            Quad.genQuad('begin_block', funcName, '_', '_')
+            func = Quad.genQuad('begin_block', funcName, '_', '_')
+            scope = self.sym_table.get(nesting_level-1)
+            scope.get(scope.size()-1).set_start_quad(func.label)
 
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
@@ -1225,6 +1239,69 @@ class Quad:
                 quad.arg3 = target_label
 
 ### =====================================================
+
+### =============== Symbol Table ====================
+class Entity:
+    offset = 0
+    def __init__(self, name, value = None, par_mode = None, start_quad = None, args = None, frame_length = None):
+        self.name = name
+        self.value = value
+        self.par_mode = par_mode
+        self.start_quad = start_quad
+        self.args = args
+        self.frame_length = frame_length
+
+    def __str__(self):
+        return f"{self.name} : {self.start_quad} : {self.args} : {self.frame_length} : {self.par_mode} : {self.value} : {self.offset}"
+
+    def set_start_quad(self, quad):
+        self.start_quad = quad
+
+nesting_level = 0
+class Scope:
+    offset = 8
+    def __init__(self):
+        self.entities = {}
+        global nesting_level
+        nesting_level += 1
+        self.nesting_level = nesting_level
+
+    def addEntity(self, entity):
+        self.offset += 4
+        entity.offset = self.offset
+        self.entities.append(entity)
+
+    def close(self):
+        global nesting_level
+        nesting_level -= 1
+
+        for entity in self.entities:
+            print(entity)
+
+class Argument:
+    def __init__(self, par_mode):
+        self.par_mode = par_mode
+
+class SymbolTable:
+    def __init__(self):
+        self.table = {}
+
+    def add(self, nesting_level, scope):
+        if nesting_level not in self.table:
+            self.table[nesting_level] = scope
+        else:
+            self.table[nesting_level].append(scope)
+
+    def append(self, scope):
+        self.table.append(scope)
+
+    def get(self, nesting_level):
+        if nesting_level in self.table:
+            return self.table[nesting_level]
+        else:
+            return None
+
+### =================================================
 
 def main():
     start = timer()
