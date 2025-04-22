@@ -397,8 +397,7 @@ class Parser:
         global token
         
         if token.recognized_string == "πρόγραμμα":
-            glob = Scope()
-            self.sym_table.add(nesting_level, glob)
+            self.sym_table.enter_scope()
 
             token = self.get_token()
             
@@ -435,6 +434,8 @@ class Parser:
         Quad.genQuad('halt', '_', '_', '_')
         Quad.genQuad('end_block', progName, '_', '_')
 
+        self.sym_table.exit_scope()
+
     def declarations(self):
         global token
 
@@ -454,11 +455,9 @@ class Parser:
         global token
         
         if token.family == "id":
-            scope = self.sym_table.get(nesting_level)
-
             while token.family == "id":
                 var = Entity(token.recognized_string)
-                scope.addEntity(var)
+                self.sym_table.addEntity(var)
 
                 token = self.get_token()
 
@@ -481,8 +480,7 @@ class Parser:
         global token
 
         while token.recognized_string == "συνάρτηση" or token.recognized_string == "διαδικασία":
-            scope = Scope()
-            self.sym_table.add(nesting_level, scope)
+            self.sym_table.enter_scope()
 
             if token.recognized_string == "συνάρτηση":
                 token = self.get_token()
@@ -568,8 +566,10 @@ class Parser:
             self.subprograms()
 
             func = Quad.genQuad('begin_block', funcName, '_', '_')
-            scope = self.sym_table.get(nesting_level-1)
-            scope.get(scope.size()-1).set_start_quad(func.label)
+            entity = Entity(funcName)
+            self.sym_table.addEntity(entity)
+            scope = self.sym_table.table[nesting_level-1]
+            scope.entities[len(scope.entities)-1].set_start_quad(func)
 
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
@@ -582,7 +582,11 @@ class Parser:
             else:
                 self.error("func-start")
 
-            Quad.genQuad('end_block', funcName, '_', '_')
+            end_quad = Quad.genQuad('end_block', funcName, '_', '_')
+            scope = self.sym_table.table[nesting_level-1]
+            scope.entities[len(scope.entities)-1].set_frame_length(func, end_quad)
+
+            self.sym_table.exit_scope()
 
         else:
             self.error("func-interface")
@@ -599,8 +603,10 @@ class Parser:
 
             self.subprograms()
 
-            Quad.genQuad('begin_block', procName, '_', '_')
-
+            proc = Quad.genQuad('begin_block', procName, '_', '_')
+            scope = self.sym_table.table[nesting_level-1]
+            scope.entities[len(scope.entities)-1].set_start_quad(proc)
+            
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
 
@@ -611,7 +617,11 @@ class Parser:
             else:
                 self.error("proc-start")
 
-            Quad.genQuad('end_block', procName, '_', '_')
+            end_quad = Quad.genQuad('end_block', procName, '_', '_')
+            scope = self.sym_table.table[nesting_level-1]
+            scope.entities[len(scope.entities)-1].set_frame_length(proc, end_quad)
+
+            self.sym_table.exit_scope()
 
         else:
             self.error("proc-interface")
@@ -1242,7 +1252,6 @@ class Quad:
 
 ### =============== Symbol Table ====================
 class Entity:
-    offset = 0
     def __init__(self, name, value = None, par_mode = None, start_quad = None, args = None, frame_length = None):
         self.name = name
         self.value = value
@@ -1255,28 +1264,51 @@ class Entity:
         return f"{self.name} : {self.start_quad} : {self.args} : {self.frame_length} : {self.par_mode} : {self.value} : {self.offset}"
 
     def set_start_quad(self, quad):
-        self.start_quad = quad
+        self.start_quad = quad + 1
+
+    def set_frame_length(self, start, end):
+        length = end - start
+        self.frame_length = length + self.offset
 
 nesting_level = 0
 class Scope:
-    offset = 8
     def __init__(self):
-        self.entities = {}
+        self.entities = []
         global nesting_level
         nesting_level += 1
         self.nesting_level = nesting_level
-
-    def addEntity(self, entity):
-        self.offset += 4
-        entity.offset = self.offset
-        self.entities.append(entity)
+        self.offset = 12
 
     def close(self):
         global nesting_level
+        self.print()
         nesting_level -= 1
 
+    def print(self):
+        global nesting_level
+        output = "scope: " + str(self.nesting_level) + "\n"
+
         for entity in self.entities:
-            print(entity)
+            if(entity.name != None):
+                output += "name: " + str(entity.name) + ", "
+            if(entity.value != None):
+                output += "value: " + str(entity.value) + ", "
+            if(entity.par_mode != None):
+                output += "par_mode: " + str(entity.par_mode) + ", "
+            if(entity.start_quad != None):
+                output += "start_quad: " + str(entity.start_quad) + ", "
+                if(entity.args != None):
+                    output += "args: " + str(entity.args) + ", "
+                if(entity.frame_length != None):
+                    output += "frame_length: " + str(entity.frame_length) + ", "
+                output += "\n"
+                continue
+            if(entity.offset != None):
+                output += "offset: " + str(entity.offset) + ", "
+            
+            output += "\n"
+
+        print(output)
 
 class Argument:
     def __init__(self, par_mode):
@@ -1284,22 +1316,29 @@ class Argument:
 
 class SymbolTable:
     def __init__(self):
-        self.table = {}
+        self.table = []
 
-    def add(self, nesting_level, scope):
-        if nesting_level not in self.table:
-            self.table[nesting_level] = scope
-        else:
-            self.table[nesting_level].append(scope)
-
-    def append(self, scope):
-        self.table.append(scope)
-
-    def get(self, nesting_level):
+    def get_scope(self, nesting_level):
         if nesting_level in self.table:
             return self.table[nesting_level]
         else:
             return None
+        
+    def enter_scope(self):
+        scope = Scope()
+        self.table.append(scope)
+
+    def exit_scope(self):
+        if len(self.table) > 0:
+            scope = self.table.pop()
+            scope.close()
+    
+    def addEntity(self, entity):
+        scope = self.table.pop()
+        entity.offset = scope.offset
+        scope.offset += 4
+        scope.entities.append(entity)
+        self.table.append(scope)
 
 ### =================================================
 
