@@ -412,8 +412,12 @@ class Parser:
             self.error("program")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR SYMBOL TABLE
     def program_block(self):
         global token
+
+        # Enter the program scope
+        self.sym_table.enter_scope()
 
         self.declarations()
 
@@ -434,6 +438,7 @@ class Parser:
         Quad.genQuad('halt', '_', '_', '_')
         Quad.genQuad('end_block', progName, '_', '_')
 
+        # Exit program scope
         self.sym_table.exit_scope()
 
     def declarations(self):
@@ -451,12 +456,14 @@ class Parser:
     # varlist() updates the token at the end
     # so there is no need to call get_token()
     # after varlist() is called in the code
+    # CHANGED FOR SYMBOL TABLE
     def varlist(self):
         global token
         
         if token.family == "id":
             while token.family == "id":
                 var = Entity(token.recognized_string)
+                # Add variable to symbol table
                 self.sym_table.addEntity(var)
 
                 token = self.get_token()
@@ -501,6 +508,15 @@ class Parser:
         if token.family == "id":
             global funcName
             funcName = token.recognized_string
+
+            # Add function to the symbol table
+            func_entity = Entity(funcName)
+            func_entity.value = "function"
+            self.sym_table.addEntity(func_entity)
+
+            # Enter function scope
+            self.sym_table.enter_scope()
+
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -516,6 +532,10 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
+
+            # Exit function scope
+            self.sym_table.exit_scope()
+
         else:
             self.error("funDec")
 
@@ -526,6 +546,15 @@ class Parser:
         if token.family == "id":
             global procName
             procName = token.recognized_string
+
+            # Add procedure to symbol table
+            proc_entity = Entity(procName)
+            proc_entity.value = "procedure"  # Mark as procedure
+            self.sym_table.addEntity(proc_entity)
+
+            # Enter the procedure scope
+            self.sym_table.enter_scope()
+
             token = self.get_token()
 
             if token.recognized_string == "(":
@@ -541,6 +570,10 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
+            
+            # Exit the procedure scope
+            self.sym_table.exit_scope()
+
         else:
             self.error("funDec")
 
