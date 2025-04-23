@@ -524,9 +524,6 @@ class Parser:
             else:
                 self.error("bracketsOpen")
 
-            # Exit function scope
-            self.sym_table.exit_scope()
-
         else:
             self.error("funDec")
 
@@ -550,7 +547,7 @@ class Parser:
 
             if token.recognized_string == "(":
                 token = self.get_token()
-                
+
                 self.formalparlist()
 
                 if token.recognized_string == ")":
@@ -561,9 +558,6 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
-            
-            # Exit the procedure scope
-            self.sym_table.exit_scope()
 
         else:
             self.error("funDec")
