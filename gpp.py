@@ -410,8 +410,6 @@ class Parser:
                 token = self.get_token()
                 self.program_block()
 
-                # Exit program scope
-                self.sym_table.exit_scope()
             else:
                 self.error("name")
         else:
@@ -439,6 +437,7 @@ class Parser:
 
         Quad.genQuad('halt', '_', '_', '_')
         Quad.genQuad('end_block', progName, '_', '_')
+        self.sym_table.exit_scope()
 
     def declarations(self):
         global token
@@ -524,9 +523,6 @@ class Parser:
             else:
                 self.error("bracketsOpen")
 
-            # Exit function scope
-            self.sym_table.exit_scope()
-
         else:
             self.error("funDec")
 
@@ -561,9 +557,6 @@ class Parser:
                     self.error("bracketsClose")
             else:
                 self.error("bracketsOpen")
-            
-            # Exit the procedure scope
-            self.sym_table.exit_scope()
 
         else:
             self.error("funDec")
@@ -600,8 +593,8 @@ class Parser:
             self.subprograms()
 
             func = Quad.genQuad('begin_block', funcName, '_', '_')
-            entity = Entity(funcName)
-            self.sym_table.addEntity(entity)
+            # entity = Entity(funcName)
+            # self.sym_table.addEntity(entity)
             scope = self.sym_table.table[nesting_level-1]
             scope.entities[len(scope.entities)-1].set_start_quad(func)
 
@@ -676,6 +669,7 @@ class Parser:
 
                 entity = Entity(name, None, 'in')
                 self.sym_table.addEntity(entity)
+                self.sym_table.addArg(entity)
 
                 token = self.get_token()
                 if token.recognized_string == ",":
@@ -707,6 +701,7 @@ class Parser:
 
                 entity = Entity(name, None, 'out')
                 self.sym_table.addEntity(entity)
+                self.sym_table.addArg(entity)
 
                 token = self.get_token()
                 if token.recognized_string == ",":
@@ -916,7 +911,8 @@ class Parser:
                     # Condition check
                     temp = Quad.newTemp()
                     Quad.genQuad('<=', counter_var, final_value, temp)
-                    
+                    self.sym_table.addEntity(Entity(temp))
+
                     # Create jump for loop exit
                     exit_list = Quad.makeList(Quad.nextQuad())
                     exit_list.append(Quad.genQuad('jump', '_', '_', temp))
@@ -930,6 +926,8 @@ class Parser:
                         Quad.genQuad('+', counter_var, step_value, increment_temp)
                         Quad.genQuad(':=', increment_temp, '_', counter_var)
                         
+                        self.sym_table.addEntity(Entity(increment_temp))
+
                         # Jump back to condition check
                         Quad.genQuad('jump', '_', '_', start_label)
                         
@@ -1163,6 +1161,8 @@ class Parser:
             
             # Generate quad for the addition/subtraction
             temp_result = Quad.newTemp()
+            self.sym_table.addEntity(Entity(temp_result))
+
             Quad.genQuad(op, first_operand, second_operand, temp_result)
             first_operand = temp_result  # Update first_operand for chained operations
         
@@ -1185,6 +1185,7 @@ class Parser:
             
             # Generate quad for the multiplication/division
             temp_result = Quad.newTemp()
+            self.sym_table.addEntity(Entity(temp_result))
             Quad.genQuad(op, first_operand, second_operand, temp_result)
             first_operand = temp_result  # Update first_operand for chained operations
             
@@ -1206,6 +1207,7 @@ class Parser:
             if op == '-':
                 temp = Quad.newTemp()
                 Quad.genQuad('-', '0', operand, temp) # The -α is (0 - α)
+                self.sym_table.addEntity(Entity(temp))
                 return temp
             
             # Just return the operand if it's +
@@ -1236,6 +1238,7 @@ class Parser:
             # Function or procedure call (it has '(' )
             if token.recognized_string == "(":
                 temp = Quad.newTemp()
+                self.sym_table.addEntity(Entity(temp))
                 self.idtail()
                 return temp
                 
@@ -1314,7 +1317,7 @@ class Quad:
 
 ### =============== Symbol Table ====================
 class Entity:
-    def __init__(self, name, value = None, par_mode = None, start_quad = None, args = None, frame_length = None):
+    def __init__(self, name, value = None, par_mode = None, start_quad = None, args = [], frame_length = None):
         self.name = name
         self.value = value
         self.par_mode = par_mode
@@ -1400,6 +1403,11 @@ class SymbolTable:
         entity.offset = scope.offset
         scope.offset += 4
         scope.entities.append(entity)
+        self.table.append(scope)
+
+    def addArg(self, entity):
+        scope = self.table.pop()
+        scope.entities[len(scope.entities)-1].args.append(entity.par_mode)
         self.table.append(scope)
 
 ### =================================================
