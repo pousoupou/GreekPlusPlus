@@ -546,7 +546,7 @@ class Parser:
 
             if token.recognized_string == "(":
                 token = self.get_token()
-                
+
                 self.formalparlist()
 
                 if token.recognized_string == ")":
