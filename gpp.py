@@ -397,13 +397,12 @@ class Parser:
         global token
         
         if token.recognized_string == "πρόγραμμα":
-            self.sym_table.enter_scope()
-
             token = self.get_token()
             
             if token.family == "id":
                 global progName
                 progName = token.recognized_string #Store the name to use later
+
                 token = self.get_token()
                 self.program_block()
             else:
@@ -510,8 +509,7 @@ class Parser:
             funcName = token.recognized_string
 
             # Add function to the symbol table
-            func_entity = Entity(funcName)
-            func_entity.value = "function"
+            func_entity = Entity(funcName, 'funtion')
             self.sym_table.addEntity(func_entity)
 
             # Enter function scope
@@ -548,8 +546,7 @@ class Parser:
             procName = token.recognized_string
 
             # Add procedure to symbol table
-            proc_entity = Entity(procName)
-            proc_entity.value = "procedure"  # Mark as procedure
+            proc_entity = Entity(procName, 'procedure')
             self.sym_table.addEntity(proc_entity)
 
             # Enter the procedure scope
