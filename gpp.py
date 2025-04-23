@@ -393,6 +393,7 @@ class Parser:
         print("Syntax analyzer finished successfully")
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def program(self):
         global token
         
@@ -403,20 +404,22 @@ class Parser:
                 global progName
                 progName = token.recognized_string #Store the name to use later
 
+                # Enter program scope
+                self.sym_table.enter_scope()
+
                 token = self.get_token()
                 self.program_block()
+
+                # Exit program scope
+                self.sym_table.exit_scope()
             else:
                 self.error("name")
         else:
             self.error("program")
 
     #CHANGED FOR INTERMEDIATE CODE
-    # CHANGED FOR SYMBOL TABLE
     def program_block(self):
         global token
-
-        # Enter the program scope
-        self.sym_table.enter_scope()
 
         self.declarations()
 
@@ -436,9 +439,6 @@ class Parser:
 
         Quad.genQuad('halt', '_', '_', '_')
         Quad.genQuad('end_block', progName, '_', '_')
-
-        # Exit program scope
-        self.sym_table.exit_scope()
 
     def declarations(self):
         global token
@@ -472,10 +472,8 @@ class Parser:
 
                     if token.family != "id":
                         self.error("varName")
-
                 else:
                     break
-            
         else:
             self.error("varName")
 
@@ -486,21 +484,16 @@ class Parser:
         global token
 
         while token.recognized_string == "συνάρτηση" or token.recognized_string == "διαδικασία":
-            self.sym_table.enter_scope()
-
             if token.recognized_string == "συνάρτηση":
                 token = self.get_token()
-
                 self.func()
-
             elif token.recognized_string == "διαδικασία":
                 token = self.get_token()
-
                 self.proc()
-
             token = self.get_token()
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def func(self):
         global token
 
@@ -509,7 +502,7 @@ class Parser:
             funcName = token.recognized_string
 
             # Add function to the symbol table
-            func_entity = Entity(funcName, 'funtion')
+            func_entity = Entity(funcName, 'function')
             self.sym_table.addEntity(func_entity)
 
             # Enter function scope
@@ -519,7 +512,7 @@ class Parser:
 
             if token.recognized_string == "(":
                 token = self.get_token()
-
+                
                 self.formalparlist()
 
                 if token.recognized_string == ")":
@@ -538,6 +531,7 @@ class Parser:
             self.error("funDec")
 
     #CHANGED FOR INTERMEDIATE CODE
+    #CHANGED FOR SYMBOL TABLE
     def proc(self):
         global token
 
@@ -549,14 +543,14 @@ class Parser:
             proc_entity = Entity(procName, 'procedure')
             self.sym_table.addEntity(proc_entity)
 
-            # Enter the procedure scope
+            # Enter procedure scope
             self.sym_table.enter_scope()
 
             token = self.get_token()
 
             if token.recognized_string == "(":
                 token = self.get_token()
-
+                
                 self.formalparlist()
 
                 if token.recognized_string == ")":
@@ -574,11 +568,21 @@ class Parser:
         else:
             self.error("funDec")
 
+    #CHANGED FOR SYMBOL TABLE
     def formalparlist(self):
         global token
+        self.parameter_names = []
 
         if token.family == "id":
-            self.varlist()
+            while token.family == "id":
+                self.parameter_names.append(token.recognized_string)
+                token = self.get_token()
+
+                if token.recognized_string == ",":
+                    token = self.get_token()
+                else:
+                    break
+            
         elif token.recognized_string != ")":
             self.error("parList")
 
@@ -656,14 +660,28 @@ class Parser:
         else:
             self.error("proc-interface")
 
+    # CHANGED FOR SYMBOL TABLE
     def funcinput(self):
         global token
 
         if token.recognized_string == "είσοδος":
             token = self.get_token()
 
-            if token.family == "id":
-                self.varlist()
+            while token.family == "id":
+                name = token.recognized_string
+
+                # Add the formal parameters in symbol table
+                if name not in self.parameter_names:
+                    self.error(f"{name} didnt find it in the formal param list")
+
+                entity = Entity(name, None, 'in')
+                self.sym_table.addEntity(entity)
+
+                token = self.get_token()
+                if token.recognized_string == ",":
+                    token = self.get_token()
+                else:
+                    break
             else:
                 self.error("varName")
         
@@ -673,14 +691,28 @@ class Parser:
         elif token.recognized_string == "δήλωση":
             self.declarations()
 
+    # CHANGED FOR SYMBOL TABLE
     def funcoutput(self):
         global token
 
         if token.recognized_string == "έξοδος":
             token = self.get_token()
 
-            if token.family == "id":
-                self.varlist()
+            while token.family == "id":
+                name = token.recognized_string
+
+                # Add the formal parameters in symbol table
+                if name not in self.parameter_names:
+                    self.error(f"{name} didnt find it in the formal param list")
+
+                entity = Entity(name, None, 'out')
+                self.sym_table.addEntity(entity)
+
+                token = self.get_token()
+                if token.recognized_string == ",":
+                    token = self.get_token()
+                else:
+                    break
             else:
                 self.error("varName")
         
@@ -1300,7 +1332,7 @@ class Entity:
         length = end - start
         self.frame_length = length + self.offset
 
-nesting_level = 0
+nesting_level = -1 # THE GLOBAL SCOPE IS 0
 class Scope:
     def __init__(self):
         self.entities = []
@@ -1316,7 +1348,7 @@ class Scope:
 
     def print(self):
         global nesting_level
-        output = "scope: " + str(self.nesting_level) + "\n"
+        output = "Scope: " + str(self.nesting_level) + "\n"
 
         for entity in self.entities:
             if(entity.name != None):
