@@ -1410,6 +1410,45 @@ class SymbolTable:
         scope.entities[len(scope.entities)-1].args.append(entity.par_mode)
         self.table.append(scope)
 
+    def lookup(self, name):
+        for scope in reversed(self.table):
+            for entity in scope.entities:
+                if entity.name == name:
+                    return entity, scope
+        return None, None
+
+### =================================================
+
+### =============== Final Code ====================
+class CodeGenerator:
+    def __init__(self, sym_table):
+        self.sym_table = sym_table
+
+    def loadvr(self, variable, destination_reg):
+        # For arithmetic constants
+        if variable.isdigit():
+            print(f"li {destination_reg}, {variable}")
+            return
+
+        # Lookup the entity and the scope in symbol table
+        entity, scope = self.sym_table.lookup(variable)
+
+        if scope.nesting_level == 0:
+            # For variables passed with CV
+            if entity.par_mode == 'CV':
+                print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is passed with CV")
+            # For variables passed with REF
+            elif entity.par_mode == 'REF':
+                print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is passed with REF")
+            # For global variables
+            else:
+                print(f"lw {destination_reg}, -{entity.offset}(gp), {entity.name} is global")
+        
+        # For local variables
+        elif scope.nesting_level > 0:
+            print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is local")
+
+            
 ### =================================================
 
 def main():
