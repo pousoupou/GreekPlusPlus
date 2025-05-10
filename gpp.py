@@ -304,6 +304,7 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.sym_table = SymbolTable()
+        self.code_generator = CodeGenerator(self.sym_table)
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -768,6 +769,14 @@ class Parser:
             token = self.get_token()
             
             expr_place = self.expression()
+
+            # Look up variable in symbol table
+            entity, variable_scope_level = self.sym_table.lookup(expr_place)
+            current_scope = len(self.sym_table.table) - 1
+
+            if variable_scope_level != current_scope and variable_scope_level is not None:
+                self.code_generator.gnlvcode(expr_place)
+
             # Generate assignment quad
             Quad.genQuad(':=', expr_place, '_', var_name)
         else:
@@ -1346,7 +1355,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        self.print()
+        # self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1414,7 +1423,7 @@ class SymbolTable:
         for scope in reversed(self.table):
             for entity in scope.entities:
                 if entity.name == name:
-                    return entity, scope
+                    return entity, scope.nesting_level
         return None, None
 
 ### =================================================
@@ -1448,6 +1457,24 @@ class CodeGenerator:
         elif scope.nesting_level > 0:
             print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is local")
 
+    def gnlvcode(self, variable):
+        entity, variable_scope_level = self.sym_table.lookup(variable)
+
+        # If we didnt find the variabel in symbol table
+        if entity is None:
+            print(f"Did not find variable {variable}")
+            return
+        
+        current_scope_level = len(self.sym_table.table) - 1 # Current nesting level
+
+        print("lw t0, -4(sp)") # Go to the parent
+
+        # Move up as many times as needed 
+        for i in range(current_scope_level - 1, variable_scope_level, -1):
+            print("lw t0, -4(t0)")
+
+        # Move t0 down by offset
+        print(f"addi t0, t0, -{entity.offset}")
             
 ### =================================================
 
