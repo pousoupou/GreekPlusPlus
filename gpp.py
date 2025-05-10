@@ -759,6 +759,7 @@ class Parser:
             self.error("statement")
 
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def assignment_stat(self):
         global token
         
@@ -1201,6 +1202,7 @@ class Parser:
         return first_operand
 
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def factor(self):
         global token
         
@@ -1250,6 +1252,13 @@ class Parser:
                 self.sym_table.addEntity(Entity(temp))
                 self.idtail()
                 return temp
+            
+            # For example: μ := γ + 1 where γ is from outer scope
+            entity, variable_scope_level = self.sym_table.lookup(operand)
+            current_scope = len(self.sym_table.table) - 1
+
+            if variable_scope_level != current_scope and variable_scope_level is not None:
+                self.code_generator.gnlvcode(operand)
                 
             return operand
 
