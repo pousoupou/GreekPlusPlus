@@ -581,6 +581,7 @@ class Parser:
             self.error("parList")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def funcblock(self):
         global token
 
@@ -594,6 +595,9 @@ class Parser:
             self.subprograms()
 
             func = Quad.genQuad('begin_block', funcName, '_', '_')
+
+            self.code_generator.beginBlock()
+
             # entity = Entity(funcName)
             # self.sym_table.addEntity(entity)
             scope = self.sym_table.table[nesting_level-1]
@@ -615,6 +619,8 @@ class Parser:
             scope.entities[len(scope.entities)-1].set_frame_length(func, end_quad)
 
             self.sym_table.exit_scope()
+
+            self.code_generator.generateEndOfBlock()
 
         else:
             self.error("func-interface")
@@ -771,15 +777,11 @@ class Parser:
             
             expr_place = self.expression()
 
-            # Look up variable in symbol table
-            entity, variable_scope_level = self.sym_table.lookup(expr_place)
-            current_scope = len(self.sym_table.table) - 1
-
-            if variable_scope_level != current_scope and variable_scope_level is not None:
-                self.code_generator.gnlvcode(expr_place)
-
             # Generate assignment quad
             Quad.genQuad(':=', expr_place, '_', var_name)
+
+            self.code_generator.generateAssignment(expr_place, var_name)
+
         else:
             self.error("assign")
 
@@ -1039,6 +1041,7 @@ class Parser:
         if token.recognized_string != "%":
             # (CV)
             expr_place = self.expression()
+
             Quad.genQuad('par', expr_place, 'CV', '_')
         else:
             # (REF)
@@ -1047,6 +1050,7 @@ class Parser:
                 self.error("varName")
             else:
                 var_name = token.recognized_string
+                
                 Quad.genQuad('par', var_name, 'REF', '_')
                 token = self.get_token()
 
@@ -1154,6 +1158,7 @@ class Parser:
 
     # expression() also updates the token at the end
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def expression(self):
         global token
         
@@ -1174,6 +1179,9 @@ class Parser:
             self.sym_table.addEntity(Entity(temp_result))
 
             Quad.genQuad(op, first_operand, second_operand, temp_result)
+
+            self.code_generator.generateArithmetic(op, first_operand, second_operand, temp_result)
+
             first_operand = temp_result  # Update first_operand for chained operations
         
         return first_operand
@@ -1196,13 +1204,13 @@ class Parser:
             # Generate quad for the multiplication/division
             temp_result = Quad.newTemp()
             self.sym_table.addEntity(Entity(temp_result))
+
             Quad.genQuad(op, first_operand, second_operand, temp_result)
             first_operand = temp_result  # Update first_operand for chained operations
             
         return first_operand
 
     # CHANGED FOR INTERMEDIATE CODE
-    # CHANGED FOR FINAL CODE
     def factor(self):
         global token
         
@@ -1253,13 +1261,6 @@ class Parser:
                 self.idtail()
                 return temp
             
-            # For example: μ := γ + 1 where γ is from outer scope
-            entity, variable_scope_level = self.sym_table.lookup(operand)
-            current_scope = len(self.sym_table.table) - 1
-
-            if variable_scope_level != current_scope and variable_scope_level is not None:
-                self.code_generator.gnlvcode(operand)
-                
             return operand
 
     def relational_oper(self):
@@ -1441,35 +1442,11 @@ class SymbolTable:
 class CodeGenerator:
     def __init__(self, sym_table):
         self.sym_table = sym_table
-
-    def loadvr(self, variable, destination_reg):
-        # For arithmetic constants
-        if variable.isdigit():
-            print(f"li {destination_reg}, {variable}")
-            return
-
-        # Lookup the entity and the scope in symbol table
-        entity, scope = self.sym_table.lookup(variable)
-
-        if scope.nesting_level == 0:
-            # For variables passed with CV
-            if entity.par_mode == 'CV':
-                print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is passed with CV")
-            # For variables passed with REF
-            elif entity.par_mode == 'REF':
-                print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is passed with REF")
-            # For global variables
-            else:
-                print(f"lw {destination_reg}, -{entity.offset}(gp), {entity.name} is global")
-        
-        # For local variables
-        elif scope.nesting_level > 0:
-            print(f"lw {destination_reg}, -{entity.offset}(sp), {entity.name} is local")
+        self.label_counter = 0
 
     def gnlvcode(self, variable):
         entity, variable_scope_level = self.sym_table.lookup(variable)
-
-        # If we didnt find the variabel in symbol table
+        # If we didnt find the variable in symbol table
         if entity is None:
             print(f"Did not find variable {variable}")
             return
@@ -1484,7 +1461,103 @@ class CodeGenerator:
 
         # Move t0 down by offset
         print(f"addi t0, t0, -{entity.offset}")
+
+    def loadvr(self, variable, destination_reg):
+        entity, variable_scope_level = self.sym_table.lookup(variable)
+
+        # If we didnt find the variable in symbol table
+        if entity is None and (not variable.isdigit()):
+            print(f"Did not find variable {variable}")
+            return
+        
+        current_scope_level = len(self.sym_table.table) - 1 # Current scope level
+
+        # Variable is in current function scope and it's a temp variable
+        if current_scope_level == variable_scope_level and variable.startswith('t@'):
+            print(f"lw {destination_reg}, -{entity.offset}(sp)")
+
+        elif variable.isdigit():
+            print(f"li {destination_reg}, {variable}")
+
+        elif current_scope_level == variable_scope_level:
+            print(f"lw {destination_reg}, -{entity.offset}(sp)")
+
+    def storevr(self, destination_reg, variable):
+        entity, variable_scope_level = self.sym_table.lookup(variable)
+
+        # If we didnt find the variable in symbol table
+        if entity is None and (not variable.isdigit()):
+            print(f"Did not find variable {variable}")
+            return
+        
+        current_scope_level = len(self.sym_table.table) - 1 # Current scope level
+
+        # Variable is in current function scope and it's a temp variable
+        if current_scope_level == variable_scope_level and variable.startswith('t@'):
+            print(f"sw {destination_reg}, -{entity.offset}(sp)")
+
+        elif current_scope_level == variable_scope_level and entity.par_mode == None:
+            print(f"lw {destination_reg}, -{entity.offset}(sp)")
+
+        elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
+            print(f"lw t0, -{entity.offset}(sp)")
+            print(f"sw {destination_reg}, (t0)")
+
+        elif variable_scope_level == 0:
+            print(f"sw {destination_reg}, -{entity.offset}(gp)")
+
+
+    def generateEndOfBlock(self):
+        print(f"{self.newLabel()}")
+        print("lw ra, -0(sp)")
+        print("jr ra")
+
+    def generateAssignment(self, source, destination):
+        # Print the label
+        print(self.newLabel())
+
+        # Load source
+        self.loadvr(source, 't1')
+
+        # Store destination
+        self.storevr('t1', destination)
+
+    # For arithmetic operations
+    def generateArithmetic(self, op, x, y, z):
+        # Print the label
+        print(self.newLabel())
+
+        # Load x
+        self.loadvr(x, 't1')
+
+        # Load y
+        self.loadvr(y, 't2')
+
+        # Perform operation
+        if op == '+':
+            print("add t1, t1, t2")
+        elif op == '-':
+            print("sub t1, t1, t2")
+        elif op == '/':
+            print("div t1, t1, t2")
+        else:
+            print("mul t1, t1, t2")
+
+        # Store result
+        self.storevr('t1', z)
+        
+        # Empty line
+        print()
+
+    # Generate new labels for final code
+    def newLabel(self):
+        label = f"L{self.label_counter}:"
+        self.label_counter += 1
+        return label
             
+    def beginBlock(self):
+        print(f"{self.newLabel()} j Lmain")
+        print(f"{self.newLabel()} sw ra, -0(sp)")
 ### =================================================
 
 def main():
