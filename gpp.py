@@ -417,14 +417,18 @@ class Parser:
             self.error("program")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def program_block(self):
         global token
+
+        self.code_generator.beginBlock()
 
         self.declarations()
 
         self.subprograms()
 
         Quad.genQuad('begin_block', progName, '_', '_')
+
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -581,7 +585,6 @@ class Parser:
             self.error("parList")
 
     #CHANGED FOR INTERMEDIATE CODE
-    # CHANGED FOR FINAL CODE
     def funcblock(self):
         global token
 
@@ -595,8 +598,6 @@ class Parser:
             self.subprograms()
 
             func = Quad.genQuad('begin_block', funcName, '_', '_')
-
-            self.code_generator.beginBlock()
 
             # entity = Entity(funcName)
             # self.sym_table.addEntity(entity)
@@ -619,8 +620,6 @@ class Parser:
             scope.entities[len(scope.entities)-1].set_frame_length(func, end_quad)
 
             self.sym_table.exit_scope()
-
-            self.code_generator.generateEndOfBlock()
 
         else:
             self.error("func-interface")
@@ -1497,7 +1496,7 @@ class CodeGenerator:
             print(f"sw {destination_reg}, -{entity.offset}(sp)")
 
         elif current_scope_level == variable_scope_level and entity.par_mode == None:
-            print(f"lw {destination_reg}, -{entity.offset}(sp)")
+            print(f"sw {destination_reg}, -{entity.offset}(sp)")
 
         elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
             print(f"lw t0, -{entity.offset}(sp)")
@@ -1505,7 +1504,6 @@ class CodeGenerator:
 
         elif variable_scope_level == 0:
             print(f"sw {destination_reg}, -{entity.offset}(gp)")
-
 
     def generateEndOfBlock(self):
         print(f"{self.newLabel()}")
@@ -1545,9 +1543,10 @@ class CodeGenerator:
 
         # Store result
         self.storevr('t1', z)
-        
-        # Empty line
-        print()
+
+    # For function parameters
+    def generateParameters(self, entity, framelength):
+        print(framelength)
 
     # Generate new labels for final code
     def newLabel(self):
