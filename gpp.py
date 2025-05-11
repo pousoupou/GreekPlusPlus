@@ -417,7 +417,7 @@ class Parser:
             self.error("program")
 
     #CHANGED FOR INTERMEDIATE CODE
-    # CHANGED FOR FINAL CODE
+    #CHANGED FOR FINAL CODE
     def program_block(self):
         global token
 
@@ -429,6 +429,7 @@ class Parser:
 
         Quad.genQuad('begin_block', progName, '_', '_')
 
+        self.code_generator.beginMain()
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -585,6 +586,7 @@ class Parser:
             self.error("parList")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def funcblock(self):
         global token
 
@@ -620,6 +622,8 @@ class Parser:
             scope.entities[len(scope.entities)-1].set_frame_length(func, end_quad)
 
             self.sym_table.exit_scope()
+
+            self.code_generator.endBlock()
 
         else:
             self.error("func-interface")
@@ -1035,13 +1039,15 @@ class Parser:
             self.actualparitem()
 
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def actualparitem(self):
         global token
         if token.recognized_string != "%":
             # (CV)
             expr_place = self.expression()
-
             Quad.genQuad('par', expr_place, 'CV', '_')
+
+            self.code_generator.generateParameters(expr_place, 'CV')
         else:
             # (REF)
             token = self.get_token()
@@ -1238,9 +1244,9 @@ class Parser:
             
         elif token.recognized_string == "(":
             token = self.get_token()
-            
+
             operand = self.expression()
-            
+
             if token.recognized_string != ")":
                 self.error("bracketsClose")
             else:
@@ -1478,7 +1484,7 @@ class CodeGenerator:
         elif variable.isdigit():
             print(f"li {destination_reg}, {variable}")
 
-        elif current_scope_level == variable_scope_level:
+        elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
             print(f"lw {destination_reg}, -{entity.offset}(sp)")
 
     def storevr(self, destination_reg, variable):
@@ -1504,11 +1510,6 @@ class CodeGenerator:
 
         elif variable_scope_level == 0:
             print(f"sw {destination_reg}, -{entity.offset}(gp)")
-
-    def generateEndOfBlock(self):
-        print(f"{self.newLabel()}")
-        print("lw ra, -0(sp)")
-        print("jr ra")
 
     def generateAssignment(self, source, destination):
         # Print the label
@@ -1545,8 +1546,17 @@ class CodeGenerator:
         self.storevr('t1', z)
 
     # For function parameters
-    def generateParameters(self, entity, framelength):
-        print(framelength)
+    def generateParameters(self, parameter, mode):
+        entity, parameter_scope_level = self.sym_table.lookup(parameter)
+        entity.par_mode = mode
+
+        print(f"{self.newLabel()}")
+        
+        if mode == 'CV':
+            self.loadvr(parameter, 't0')
+            print(f"sw t0, -12(fp)")
+
+
 
     # Generate new labels for final code
     def newLabel(self):
@@ -1557,6 +1567,15 @@ class CodeGenerator:
     def beginBlock(self):
         print(f"{self.newLabel()} j Lmain")
         print(f"{self.newLabel()} sw ra, -0(sp)")
+
+    def endBlock(self):
+        print(f"{self.newLabel()}")
+        print("lw ra, -0(sp)")
+        print("jr ra")
+
+    def beginMain(self):
+        print("Lmain:")
+        print(f"{self.newLabel()}")
 ### =================================================
 
 def main():
