@@ -304,7 +304,7 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.sym_table = SymbolTable()
-        self.code_generator = CodeGenerator(self.sym_table)
+        # #self.code_generator = CodeGenerator(self.sym_table)
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -421,7 +421,7 @@ class Parser:
     def program_block(self):
         global token
 
-        self.code_generator.beginBlock()
+        #self.code_generator.beginBlock()
 
         self.declarations()
 
@@ -429,7 +429,7 @@ class Parser:
 
         Quad.genQuad('begin_block', progName, '_', '_')
 
-        self.code_generator.beginMain()
+        #self.code_generator.beginMain()
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -623,7 +623,7 @@ class Parser:
 
             self.sym_table.exit_scope()
 
-            self.code_generator.endBlock()
+            #self.code_generator.endBlock()
 
         else:
             self.error("func-interface")
@@ -783,7 +783,7 @@ class Parser:
             # Generate assignment quad
             Quad.genQuad(':=', expr_place, '_', var_name)
 
-            self.code_generator.generateAssignment(expr_place, var_name)
+            #self.code_generator.generateAssignment(expr_place, var_name)
 
         else:
             self.error("assign")
@@ -1047,7 +1047,7 @@ class Parser:
             expr_place = self.expression()
             Quad.genQuad('par', expr_place, 'CV', '_')
 
-            self.code_generator.generateParameters(expr_place, 'CV')
+            #self.code_generator.generateParameters(expr_place, 'CV')
         else:
             # (REF)
             token = self.get_token()
@@ -1185,7 +1185,7 @@ class Parser:
 
             Quad.genQuad(op, first_operand, second_operand, temp_result)
 
-            self.code_generator.generateArithmetic(op, first_operand, second_operand, temp_result)
+            #self.code_generator.generateArithmetic(op, first_operand, second_operand, temp_result)
 
             first_operand = temp_result  # Update first_operand for chained operations
         
@@ -1370,7 +1370,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        # self.print()
+        self.print()
         nesting_level -= 1
 
     def print(self):
