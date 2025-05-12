@@ -1444,12 +1444,16 @@ class SymbolTable:
 ### =================================================
 
 ### =============== Final Code ====================
+finalCode = []
+
 class CodeGenerator:
     def __init__(self, sym_table):
         self.sym_table = sym_table
         self.label_counter = 0
 
     def gnlvcode(self, variable):
+        global finalCode
+
         entity, variable_scope_level = self.sym_table.lookup(variable)
         # If we didnt find the variable in symbol table
         if entity is None:
@@ -1458,16 +1462,18 @@ class CodeGenerator:
         
         current_scope_level = len(self.sym_table.table) - 1 # Current nesting level
 
-        print("lw t0, -4(sp)") # Go to the parent
+        finalCode.append("lw t0, -4(sp)") # Go to the parent
 
         # Move up as many times as needed 
         for i in range(current_scope_level - 1, variable_scope_level, -1):
-            print("lw t0, -4(t0)")
+            finalCode.append("lw t0, -4(t0)")
 
         # Move t0 down by offset
-        print(f"addi t0, t0, -{entity.offset}")
+        finalCode.append(f"addi t0, t0, -{entity.offset}")
 
     def loadvr(self, variable, destination_reg):
+        global finalCode
+
         entity, variable_scope_level = self.sym_table.lookup(variable)
 
         # If we didnt find the variable in symbol table
@@ -1479,15 +1485,15 @@ class CodeGenerator:
 
         # Variable is in current function scope and it's a temp variable
         if current_scope_level == variable_scope_level and variable.startswith('t@'):
-            print(f"lw {destination_reg}, -{entity.offset}(sp)")
-
+            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
         elif variable.isdigit():
-            print(f"li {destination_reg}, {variable}")
-
+            finalCode.append(f"li {destination_reg}, {variable}")
         elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
-            print(f"lw {destination_reg}, -{entity.offset}(sp)")
+            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
 
     def storevr(self, destination_reg, variable):
+        global finalCode
+
         entity, variable_scope_level = self.sym_table.lookup(variable)
 
         # If we didnt find the variable in symbol table
@@ -1499,21 +1505,23 @@ class CodeGenerator:
 
         # Variable is in current function scope and it's a temp variable
         if current_scope_level == variable_scope_level and variable.startswith('t@'):
-            print(f"sw {destination_reg}, -{entity.offset}(sp)")
+            finalCode.append(f"sw {destination_reg}, -{entity.offset}(sp)")
 
         elif current_scope_level == variable_scope_level and entity.par_mode == None:
-            print(f"sw {destination_reg}, -{entity.offset}(sp)")
+            finalCode.append(f"sw {destination_reg}, -{entity.offset}(sp)")
 
         elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
-            print(f"lw t0, -{entity.offset}(sp)")
-            print(f"sw {destination_reg}, (t0)")
+            finalCode.append(f"lw t0, -{entity.offset}(sp)")
+            finalCode.append("sw {destination_reg}, (t0)")
 
         elif variable_scope_level == 0:
-            print(f"sw {destination_reg}, -{entity.offset}(gp)")
+            finalCode.append(f"sw {destination_reg}, -{entity.offset}(gp)")
 
     def generateAssignment(self, source, destination):
+        global finalCode
+
         # Print the label
-        print(self.newLabel())
+        finalCode.append(self.newLabel())
 
         # Load source
         self.loadvr(source, 't1')
@@ -1523,8 +1531,10 @@ class CodeGenerator:
 
     # For arithmetic operations
     def generateArithmetic(self, op, x, y, z):
+        global finalCode
+
         # Print the label
-        print(self.newLabel())
+        finalCode.append(self.newLabel())
 
         # Load x
         self.loadvr(x, 't1')
@@ -1534,29 +1544,29 @@ class CodeGenerator:
 
         # Perform operation
         if op == '+':
-            print("add t1, t1, t2")
+            finalCode.append("add t1, t1, t2")
         elif op == '-':
-            print("sub t1, t1, t2")
+            finalCode.append("sub t1, t1, t2")
         elif op == '/':
-            print("div t1, t1, t2")
+            finalCode.append("div t1, t1, t2")
         else:
-            print("mul t1, t1, t2")
+            finalCode.append("mul t1, t1, t2")
 
         # Store result
         self.storevr('t1', z)
 
     # For function parameters
     def generateParameters(self, parameter, mode):
+        global finalCode
+
         entity, parameter_scope_level = self.sym_table.lookup(parameter)
         entity.par_mode = mode
 
-        print(f"{self.newLabel()}")
+        finalCode.append(f"{self.newLabel()}")
         
         if mode == 'CV':
             self.loadvr(parameter, 't0')
-            print(f"sw t0, -12(fp)")
-
-
+            finalCode.append(f"sw t0, -12(fp)")
 
     # Generate new labels for final code
     def newLabel(self):
@@ -1565,17 +1575,23 @@ class CodeGenerator:
         return label
             
     def beginBlock(self):
-        print(f"{self.newLabel()} j Lmain")
-        print(f"{self.newLabel()} sw ra, -0(sp)")
+        global finalCode
+
+        finalCode.append(f"{self.newLabel()} j Lmain")
+        finalCode.append(f"{self.newLabel()} sw ra, -0(sp)")
 
     def endBlock(self):
-        print(f"{self.newLabel()}")
-        print("lw ra, -0(sp)")
-        print("jr ra")
+        global finalCode
+
+        finalCode.append(f"{self.newLabel()}")
+        finalCode.append("lw ra, -0(sp)")
+        finalCode.append("jr ra")
 
     def beginMain(self):
-        print("Lmain:")
-        print(f"{self.newLabel()}")
+        global finalCode
+
+        finalCode.append("Lmain:")
+        finalCode.append(f"{self.newLabel()}")
 ### =================================================
 
 def main():
@@ -1590,6 +1606,12 @@ def main():
     for quad in interCode:
         fd.write(str(quad) + "\n")
         # print(quad)
+
+    fd.close()
+
+    fd = open(progName + ".asm", "w", encoding="utf-8") # Encoding for greek letters
+    for line in finalCode:
+        fd.write(line + "\n")
 
     fd.close()
 
