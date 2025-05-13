@@ -22,5 +22,6 @@ L7:
 li t1, 1
 sw t1, -12(sp)
 L8:
+addi fp, sp, 20
 lw t0, -12(sp)
 sw t0, -12(fp)

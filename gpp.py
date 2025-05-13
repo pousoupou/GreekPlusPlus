@@ -1028,8 +1028,11 @@ class Parser:
     # just like sequence(), actualparlist() updates
     # the token at the end so there is no need to 
     # call get_token() after actualparlist() is called in the code
+    # CHANGED FOR FINAL CODE
     def actualparlist(self):
         global token
+
+        self.param_counter = 0 # Counter for the position of each parameter
 
         self.actualparitem()
 
@@ -1047,7 +1050,9 @@ class Parser:
             expr_place = self.expression()
             Quad.genQuad('par', expr_place, 'CV', '_')
 
-            self.code_generator.generateParameters(expr_place, 'CV')
+            self.code_generator.generateParameters(expr_place, 'CV', self.param_counter)
+
+            self.param_counter += 1
         else:
             # (REF)
             token = self.get_token()
@@ -1484,13 +1489,17 @@ class CodeGenerator:
         current_scope_level = len(self.sym_table.table) - 1 # Current scope level
 
         # Variable is in current function scope
-        if current_scope_level == variable_scope_level:
+        if current_scope_level == variable_scope_level and entity.par_mode != 'CV' and entity.par_mode != 'REF':
             finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
         
         # Variable is arithmetic constant
         elif variable.isdigit():
             finalCode.append(f"li {destination_reg}, {variable}")
-        
+
+        # Variable is in current function scope and is parameter with CV
+        elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
+            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
+
 
     def storevr(self, destination_reg, variable):
         global finalCode
@@ -1557,17 +1566,33 @@ class CodeGenerator:
         self.storevr('t1', z)
 
     # For function parameters
-    def generateParameters(self, parameter, mode):
+    def generateParameters(self, parameter, mode, counter):
         global finalCode
 
         entity, parameter_scope_level = self.sym_table.lookup(parameter)
         entity.par_mode = mode
 
         finalCode.append(f"{self.newLabel()}")
+
+        # Find current scope
+        currentScope = None
+        for scope in self.sym_table.table:
+            if scope.nesting_level == parameter_scope_level:
+                testScope = scope
+
+        # Find the max offset of variables in this scope
+        if testScope:
+            max_offset = 0
+            for entity in testScope.entities:
+                if entity.value == None:
+                        if entity.offset > max_offset:
+                            max_offset = entity.offset
         
         if mode == 'CV':
+            finalCode.append(f"addi fp, sp, {max_offset}")
             self.loadvr(parameter, 't0')
-            finalCode.append(f"sw t0, -12(fp)")
+            print(counter)
+            finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
 
     # Generate new labels for final code
     def newLabel(self):
