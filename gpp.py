@@ -304,7 +304,7 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.sym_table = SymbolTable()
-        # #self.code_generator = CodeGenerator(self.sym_table)
+        self.code_generator = CodeGenerator(self.sym_table)
 
     def error(self, case):
         print("Parser error in line: " + str(token.line_number + 1) + " " + case)
@@ -421,7 +421,7 @@ class Parser:
     def program_block(self):
         global token
 
-        #self.code_generator.beginBlock()
+        self.code_generator.beginBlock()
 
         self.declarations()
 
@@ -429,7 +429,7 @@ class Parser:
 
         Quad.genQuad('begin_block', progName, '_', '_')
 
-        #self.code_generator.beginMain()
+        self.code_generator.beginMain()
 
         if token.recognized_string == "αρχή_προγράμματος":
             token = self.get_token()
@@ -623,7 +623,7 @@ class Parser:
 
             self.sym_table.exit_scope()
 
-            #self.code_generator.endBlock()
+            self.code_generator.endBlock()
 
         else:
             self.error("func-interface")
@@ -783,7 +783,7 @@ class Parser:
             # Generate assignment quad
             Quad.genQuad(':=', expr_place, '_', var_name)
 
-            #self.code_generator.generateAssignment(expr_place, var_name)
+            self.code_generator.generateAssignment(expr_place, var_name)
 
         else:
             self.error("assign")
@@ -1047,7 +1047,7 @@ class Parser:
             expr_place = self.expression()
             Quad.genQuad('par', expr_place, 'CV', '_')
 
-            #self.code_generator.generateParameters(expr_place, 'CV')
+            self.code_generator.generateParameters(expr_place, 'CV')
         else:
             # (REF)
             token = self.get_token()
@@ -1185,7 +1185,7 @@ class Parser:
 
             Quad.genQuad(op, first_operand, second_operand, temp_result)
 
-            #self.code_generator.generateArithmetic(op, first_operand, second_operand, temp_result)
+            self.code_generator.generateArithmetic(op, first_operand, second_operand, temp_result)
 
             first_operand = temp_result  # Update first_operand for chained operations
         
@@ -1370,7 +1370,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        self.print()
+        # self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1483,13 +1483,14 @@ class CodeGenerator:
         
         current_scope_level = len(self.sym_table.table) - 1 # Current scope level
 
-        # Variable is in current function scope and it's a temp variable
-        if current_scope_level == variable_scope_level and variable.startswith('t@'):
+        # Variable is in current function scope
+        if current_scope_level == variable_scope_level:
             finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
+        
+        # Variable is arithmetic constant
         elif variable.isdigit():
             finalCode.append(f"li {destination_reg}, {variable}")
-        elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
-            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
+        
 
     def storevr(self, destination_reg, variable):
         global finalCode
@@ -1512,7 +1513,7 @@ class CodeGenerator:
 
         elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
             finalCode.append(f"lw t0, -{entity.offset}(sp)")
-            finalCode.append("sw {destination_reg}, (t0)")
+            finalCode.append(f"sw {destination_reg}, (t0)")
 
         elif variable_scope_level == 0:
             finalCode.append(f"sw {destination_reg}, -{entity.offset}(gp)")
@@ -1592,6 +1593,26 @@ class CodeGenerator:
 
         finalCode.append("Lmain:")
         finalCode.append(f"{self.newLabel()}")
+
+        # Find global scope
+        global_scope = None
+        for scope in self.sym_table.table:
+            if scope.nesting_level == 0:
+                global_scope = scope
+                break
+
+        # Find the offset that we need to add to sp
+        if global_scope:
+            max_offset = 0
+            for entity in global_scope.entities:
+                if entity.value == None:
+                    if entity.offset > max_offset:
+                        max_offset = entity.offset
+
+            stack_offset = max_offset + 4
+
+        finalCode.append(f"addi sp, sp, {stack_offset}")
+        finalCode.append(f"move gp, sp")
 ### =================================================
 
 def main():
