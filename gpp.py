@@ -992,6 +992,7 @@ class Parser:
         Quad.genQuad('out', expr_result, '_', '_')
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def call_stat(self):
         global token
 
@@ -1004,6 +1005,8 @@ class Parser:
             self.idtail()
 
             Quad.genQuad('call', func_name, '_', '_')
+
+            self.code_generator.generateCall(func_name)
         else:
             self.error("funDec")
 
@@ -1062,6 +1065,11 @@ class Parser:
                 var_name = token.recognized_string
                 
                 Quad.genQuad('par', var_name, 'REF', '_')
+
+                self.code_generator.generateParameters(var_name, 'REF', self.param_counter)
+
+                self.param_counter += 1
+
                 token = self.get_token()
 
     # condition() updates the token at the end
@@ -1375,7 +1383,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        # self.print()
+        self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1500,7 +1508,6 @@ class CodeGenerator:
         elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
             finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
 
-
     def storevr(self, destination_reg, variable):
         global finalCode
 
@@ -1575,7 +1582,7 @@ class CodeGenerator:
         finalCode.append(f"{self.newLabel()}")
 
         # Find current scope
-        currentScope = None
+        testScope = None
         for scope in self.sym_table.table:
             if scope.nesting_level == parameter_scope_level:
                 testScope = scope
@@ -1583,16 +1590,38 @@ class CodeGenerator:
         # Find the max offset of variables in this scope
         if testScope:
             max_offset = 0
-            for entity in testScope.entities:
-                if entity.value == None:
-                        if entity.offset > max_offset:
-                            max_offset = entity.offset
-        
+            for e in testScope.entities:
+                if e.value == None:
+                        if e.offset > max_offset:
+                            max_offset = e.offset
+
         if mode == 'CV':
             finalCode.append(f"addi fp, sp, {max_offset}")
             self.loadvr(parameter, 't0')
-            print(counter)
             finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
+        
+        elif mode == 'REF':
+            finalCode.append(f"addi t0, sp, -{entity.offset}")
+            finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
+
+    def generateCall(self, func_name):
+        global finalCode
+
+        func, func_scope_level = self.sym_table.lookup(func_name)
+
+        current_scope_level = len(self.sym_table.table) - 1
+
+        finalCode.append(f"{self.newLabel()}")
+
+        if func_scope_level == current_scope_level:
+            finalCode.append(f"sw sp, -4(fp)")
+        else:
+            finalCode.append(f"lw t0, -4(sp)")
+            finalCode.append(f"sw t0, -4(fp)")
+
+        finalCode.append(f"addi sp, sp, {func.frame_length}")
+        finalCode.append(f"jal L1")
+        finalCode.append(f"addi sp, sp, -{func.frame_length}")
 
     # Generate new labels for final code
     def newLabel(self):

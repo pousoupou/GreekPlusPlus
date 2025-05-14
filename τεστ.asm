@@ -25,3 +25,11 @@ L8:
 addi fp, sp, 20
 lw t0, -12(sp)
 sw t0, -12(fp)
+L9:
+addi t0, sp, -16
+sw t0, -16(fp)
+L10:
+sw sp, -4(fp)
+addi sp, sp, 28
+jal L1
+addi sp, sp, -28
