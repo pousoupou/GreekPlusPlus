@@ -632,18 +632,20 @@ class Parser:
             self.error("func-interface")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGE FOR FINAL CODE
     def procblock(self):
         global token
+
+        current_proc_name = procName
 
         if token.recognized_string == "διαπροσωπεία":
             token = self.get_token()
 
             self.funcinput()
             self.declarations()
-
             self.subprograms()
 
-            proc = Quad.genQuad('begin_block', procName, '_', '_')
+            proc = Quad.genQuad('begin_block', current_proc_name, '_', '_')
             scope = self.sym_table.table[nesting_level-1]
             scope.entities[len(scope.entities)-1].set_start_quad(proc)
 
@@ -664,6 +666,8 @@ class Parser:
             scope.entities[len(scope.entities)-1].set_frame_length(proc, end_quad)
 
             self.sym_table.exit_scope()
+            
+            self.code_generator.endBlock()
 
         else:
             self.error("proc-interface")
