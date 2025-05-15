@@ -791,6 +791,7 @@ class Parser:
 
             if expr_place == "f":
                 Quad.genQuad(':=', Quad.getLastTemp(), '_', var_name)
+                self.code_generator.generateAssignment(Quad.getLastTemp(), var_name)
                 return
 
             # Generate assignment quad
@@ -997,12 +998,15 @@ class Parser:
             self.error("varName")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def print_stat(self):
         global token
         token = self.get_token()
 
         expr_result = self.expression()
         Quad.genQuad('out', expr_result, '_', '_')
+
+        self.code_generator.generatePrint(expr_result, 't1')
 
     #CHANGED FOR INTERMEDIATE CODE
     # CHANGED FOR FINAL CODE
@@ -1023,6 +1027,7 @@ class Parser:
         else:
             self.error("funDec")
 
+    # CHANGED FOR FINAL CODE
     def assign_call_stat(self):
         global token
 
@@ -1041,9 +1046,14 @@ class Parser:
             self.sym_table.addEntity(Entity(ret))
 
             Quad.genQuad('par', ret, 'RET', '_')
+
+            self.code_generator.generateParameters(ret, 'RET', 0)
+
             Quad.genQuad('call', func_name, '_', '_')
 
             self.code_generator.generateCall(func_name)
+
+            self.code_generator.generateAssignment(ret, ret)
 
             return True
         else:
@@ -1439,7 +1449,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        self.print()
+        # self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1494,10 +1504,12 @@ class SymbolTable:
             scope = self.table.pop()
             scope.close()
     
+    # CHANGED
     def addEntity(self, entity):
         scope = self.table.pop()
         entity.offset = scope.offset
-        scope.offset += 4
+        if entity.value == None:
+            scope.offset += 4
         scope.entities.append(entity)
         self.table.append(scope)
 
@@ -1589,14 +1601,14 @@ class CodeGenerator:
             finalCode.append(f"lw t0, (t0)")
             finalCode.append(f"lw {destination_reg}, (t0)")
 
-    def storerv(self, destination_reg, variable):
+    def storerv(self, variable, destination_reg):
         global finalCode
 
         entity, variable_scope_level = self.sym_table.lookup(variable)
 
         # If we didnt find the variable in symbol table
         if entity is None and (not variable.isdigit()):
-            print(f"Did not find variable {variable}")
+            print(f"Could not find variable {variable}")
             return
         
         current_scope_level = len(self.sym_table.table) - 1 # Current scope level
@@ -1631,6 +1643,9 @@ class CodeGenerator:
     def generateAssignment(self, source, destination):
         global finalCode
 
+        if source == destination:
+            return
+
         # Print the label
         finalCode.append(self.newLabel())
 
@@ -1638,7 +1653,7 @@ class CodeGenerator:
         self.loadvr(source, 't1')
 
         # Store destination
-        self.storerv('t1', destination)
+        self.storerv(destination, 't1')
 
     def generateArithmetic(self, op, x, y, z):
         global finalCode
@@ -1663,9 +1678,8 @@ class CodeGenerator:
             finalCode.append("mul t1, t1, t2")
 
         # Store result
-        self.storerv('t1', z)
+        self.storerv(z, 't1')
 
-    # For function parameters
     def generateParameters(self, parameter, mode, counter):
         global finalCode
 
@@ -1675,18 +1689,14 @@ class CodeGenerator:
             finalCode.append(f"{self.newLabel()}")
 
             # Find current scope
-            testScope = None
-            for scope in self.sym_table.table:
-                if scope.nesting_level == parameter_scope_level:
-                    testScope = scope
+            testScope = self.sym_table.table[-1]
 
             # Find the max offset of variables in this scope
-            if testScope:
-                max_offset = 0
-                for e in testScope.entities:
-                    if e.value == None:
-                            if e.offset > max_offset:
-                                max_offset = e.offset
+            max_offset = 0
+            for e in testScope.entities:
+                if e.offset is not None and not (e.name).startswith("t@"):
+                    if e.offset > max_offset:
+                        max_offset = e.offset
 
             if mode == 'CV':
                 finalCode.append(f"addi fp, sp, {max_offset}")
@@ -1697,6 +1707,11 @@ class CodeGenerator:
                 finalCode.append(f"addi t0, sp, -{entity.offset}")
                 finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
 
+            elif mode == 'RET':
+                finalCode.append(f"addi t0, sp, -{max_offset}")
+                finalCode.append(f"sw t0, -8(fp)")
+
+    # 12 IS HARD CODED NOT SURE IF CORRECT
     def generateCall(self, function_name):
         global finalCode
 
@@ -1706,17 +1721,34 @@ class CodeGenerator:
 
         finalCode.append(f"{self.newLabel()}")
 
+        testScope = None
+        for scope in self.sym_table.table:
+            if scope.nesting_level == func_scope_level:
+                testScope = scope
+                break
+
+        max_offset = 0
+        if testScope:
+            for e in testScope.entities:
+                if e.offset is not None and not (e.name).startswith("t@"):
+                    if e.offset > max_offset:
+                        max_offset = e.offset
+
         if func_scope_level == current_scope_level:
             finalCode.append(f"sw sp, -4(fp)")
         else:
             finalCode.append(f"lw t0, -4(sp)")
             finalCode.append(f"sw t0, -4(fp)")
 
-        finalCode.append(f"addi sp, sp, {func.frame_length}")
+        finalCode.append(f"addi sp, sp, {max_offset}")
         finalCode.append(f"jal L1")
-        finalCode.append(f"addi sp, sp, -{func.frame_length}")
+        finalCode.append(f"addi sp, sp, -{max_offset}")
 
-    # Generate new labels for final code
+    def generatePrint(self, variable, destination_reg):
+        var, var_scope = self.sym_table.lookup(variable)
+        finalCode.append(f"{self.newLabel()}")
+        finalCode.append(f"lw {destination_reg}, -{var.offset}(sp)")
+
     def newLabel(self):
         label = f"\nL{self.label_counter}:"
         self.label_counter += 1
@@ -1758,7 +1790,7 @@ class CodeGenerator:
         if global_scope:
             max_offset = 0
             for entity in global_scope.entities:
-                if entity.value == None:
+                if entity.offset is not None and not (entity.name).startswith('t@'):
                     if entity.offset > max_offset:
                         max_offset = entity.offset
 
