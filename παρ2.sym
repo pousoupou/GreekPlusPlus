@@ -1,0 +1,10 @@
+Scope: 2
+Scope: 1
+name: α, par_mode: in, offset: 12, 
+name: β, par_mode: out, offset: 16, 
+name: φ2, value: procedure, start_quad: 2, args: ['in', 'out'], frame_length: 23, 
+Scope: 0
+name: α, offset: 12, 
+name: Α, offset: 16, 
+name: Β, offset: 20, 
+name: φ1, value: function, start_quad: 6, args: ['in', 'out'], frame_length: 27, 
