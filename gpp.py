@@ -590,21 +590,24 @@ class Parser:
     def funcblock(self):
         global token
 
+        current_func_name = funcName
+
         if token.recognized_string == "διαπροσωπεία":
             token = self.get_token()
 
             self.funcinput()
             self.funcoutput()
             self.declarations()
-
             self.subprograms()
 
-            func = Quad.genQuad('begin_block', funcName, '_', '_')
+            func = Quad.genQuad('begin_block', current_func_name, '_', '_')
 
             # entity = Entity(funcName)
             # self.sym_table.addEntity(entity)
             scope = self.sym_table.table[nesting_level-1]
             scope.entities[len(scope.entities)-1].set_start_quad(func)
+
+            self.code_generator.beginBlock()
 
             if token.recognized_string == "αρχή_συνάρτησης":
                 token = self.get_token()
@@ -617,7 +620,7 @@ class Parser:
             else:
                 self.error("func-start")
 
-            end_quad = Quad.genQuad('end_block', funcName, '_', '_')
+            end_quad = Quad.genQuad('end_block', current_func_name, '_', '_')
             scope = self.sym_table.table[nesting_level-1]
             scope.entities[len(scope.entities)-1].set_frame_length(func, end_quad)
 
@@ -629,20 +632,24 @@ class Parser:
             self.error("func-interface")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGE FOR FINAL CODE
     def procblock(self):
         global token
+
+        current_proc_name = procName
 
         if token.recognized_string == "διαπροσωπεία":
             token = self.get_token()
 
             self.funcinput()
             self.declarations()
-
             self.subprograms()
 
-            proc = Quad.genQuad('begin_block', procName, '_', '_')
+            proc = Quad.genQuad('begin_block', current_proc_name, '_', '_')
             scope = self.sym_table.table[nesting_level-1]
             scope.entities[len(scope.entities)-1].set_start_quad(proc)
+
+            self.code_generator.beginBlock()
             
             if token.recognized_string == "αρχή_διαδικασίας":
                 token = self.get_token()
@@ -659,6 +666,8 @@ class Parser:
             scope.entities[len(scope.entities)-1].set_frame_length(proc, end_quad)
 
             self.sym_table.exit_scope()
+            
+            self.code_generator.endBlock()
 
         else:
             self.error("proc-interface")
@@ -992,6 +1001,7 @@ class Parser:
         Quad.genQuad('out', expr_result, '_', '_')
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def call_stat(self):
         global token
 
@@ -1004,6 +1014,8 @@ class Parser:
             self.idtail()
 
             Quad.genQuad('call', func_name, '_', '_')
+
+            self.code_generator.generateCall(func_name)
         else:
             self.error("funDec")
 
@@ -1028,8 +1040,11 @@ class Parser:
     # just like sequence(), actualparlist() updates
     # the token at the end so there is no need to 
     # call get_token() after actualparlist() is called in the code
+    # CHANGED FOR FINAL CODE
     def actualparlist(self):
         global token
+
+        self.param_counter = 0 # Counter for the position of each parameter
 
         self.actualparitem()
 
@@ -1042,12 +1057,17 @@ class Parser:
     # CHANGED FOR FINAL CODE
     def actualparitem(self):
         global token
+
         if token.recognized_string != "%":
             # (CV)
             expr_place = self.expression()
-            Quad.genQuad('par', expr_place, 'CV', '_')
 
-            self.code_generator.generateParameters(expr_place, 'CV')
+            if expr_place != None:
+                Quad.genQuad('par', expr_place, 'CV', '_')
+
+            self.code_generator.generateParameters(expr_place, 'CV', self.param_counter)
+
+            self.param_counter += 1
         else:
             # (REF)
             token = self.get_token()
@@ -1057,6 +1077,11 @@ class Parser:
                 var_name = token.recognized_string
                 
                 Quad.genQuad('par', var_name, 'REF', '_')
+
+                self.code_generator.generateParameters(var_name, 'REF', self.param_counter)
+
+                self.param_counter += 1
+
                 token = self.get_token()
 
     # condition() updates the token at the end
@@ -1445,6 +1470,7 @@ class SymbolTable:
 
 ### =============== Final Code ====================
 finalCode = []
+is_first = True
 
 class CodeGenerator:
     def __init__(self, sym_table):
@@ -1485,17 +1511,38 @@ class CodeGenerator:
         
         current_scope_level = len(self.sym_table.table) - 1 # Current scope level
 
-        # Variable is in current function scope and it's a temp variable
-        if current_scope_level == variable_scope_level and variable.startswith('t@'):
-            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
-        elif variable.isdigit():
+        # Variable is arithmetic constant
+        if variable.isdigit():
             finalCode.append(f"li {destination_reg}, {variable}")
-        elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
+
+        # If variable is global
+        elif variable_scope_level == 0 and current_scope_level != variable_scope_level:
+            finalCode.append(f"lw {destination_reg}, -{entity.offset}(gp)")
+
+        elif variable_scope_level == 0 and current_scope_level == variable_scope_level:
             finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
 
-    #TODO: pg.36 missing
-    #TODO: Better grouping on the if conds would be nice
-    def storerv(self, destination_reg, variable):
+        # If variable is local, or is formal parameter by value, or is temp variable AND is in current scope
+        elif current_scope_level == variable_scope_level and (entity.par_mode == 'None' or entity.par_mode == 'in' or variable.startswith('t@')):
+            finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
+        
+        # If variable is formal parameter by reference AND is in current scope
+        elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
+            finalCode.append(f"lw t0, -{entity.offset}(sp)")
+            finalCode.append(f"lw {destination_reg}, (t0)")
+
+        # If variable is not in current scope and in it's scope it's local variable or it's formal parameter by value
+        elif current_scope_level != variable_scope_level and (entity.par_mode == 'None' or entity.par_mode == 'in'):
+            self.gnlvcode(variable)
+            finalCode.append(f"lw {destination_reg}, (t0)")
+
+        # If variable is not in current scope and in it's scope it's formal parameter by reference
+        elif current_scope_level != variable_scope_level and entity.par_mode == 'out':
+            self.gnlvcode(variable)
+            finalCode.append(f"lw t0, (t0)")
+            finalCode.append(f"lw {destination_reg}, (t0)")
+
+    def storevr(self, destination_reg, variable):
         global finalCode
 
         entity, variable_scope_level = self.sym_table.lookup(variable)
@@ -1507,19 +1554,32 @@ class CodeGenerator:
         
         current_scope_level = len(self.sym_table.table) - 1 # Current scope level
 
-        # Variable is in current function scope and it's a temp variable
-        if current_scope_level == variable_scope_level and variable.startswith('t@'):
+        # If variable is global
+        if variable_scope_level == 0 and current_scope_level != variable_scope_level:
+            finalCode.append(f"sw {destination_reg}, -{entity.offset}(gp)")
+
+        elif variable_scope_level == 0 and current_scope_level == variable_scope_level:
             finalCode.append(f"sw {destination_reg}, -{entity.offset}(sp)")
 
-        elif current_scope_level == variable_scope_level and entity.par_mode == None:
+        # If variable is local, or is formal parameter by value, or is temp variable AND is in current scope
+        elif current_scope_level == variable_scope_level and (entity.par_mode == 'None' or entity.par_mode == 'in' or variable.startswith('t@')):
             finalCode.append(f"sw {destination_reg}, -{entity.offset}(sp)")
 
+        # If variable is formal parameter by reference AND is in current scope
         elif current_scope_level == variable_scope_level and entity.par_mode == 'out':
             finalCode.append(f"lw t0, -{entity.offset}(sp)")
-            finalCode.append("sw {destination_reg}, (t0)")
+            finalCode.append(f"sw {destination_reg}, (t0)")
 
-        elif variable_scope_level == 0:
-            finalCode.append(f"sw {destination_reg}, -{entity.offset}(gp)")
+        # If variable is in scope < current scope and in it's scope it's local variable or it's formal parameter by value
+        elif current_scope_level > variable_scope_level and (entity.par_mode == 'None' or entity.par_mode == 'in'):
+            self.gnlvcode(variable)
+            finalCode.append(f"sw {destination_reg}, (t0)")
+
+        # If variable is in scope < current scope and in it's scope it's formal parameter by reference
+        elif current_scope_level > variable_scope_level and entity.par_mode == 'out':
+            self.gnlvcode(variable)
+            finalCode.append(f"lw t0, (t0)")
+            finalCode.append(f"sw {destination_reg}, (t0)")
 
     def generateAssignment(self, source, destination):
         global finalCode
@@ -1533,7 +1593,6 @@ class CodeGenerator:
         # Store destination
         self.storerv('t1', destination)
 
-    # For arithmetic operations
     def generateArithmetic(self, op, x, y, z):
         global finalCode
 
@@ -1560,17 +1619,55 @@ class CodeGenerator:
         self.storerv('t1', z)
 
     # For function parameters
-    def generateParameters(self, parameter, mode):
+    def generateParameters(self, parameter, mode, counter):
         global finalCode
 
         entity, parameter_scope_level = self.sym_table.lookup(parameter)
-        entity.par_mode = mode
+
+        if entity:
+            finalCode.append(f"{self.newLabel()}")
+
+            # Find current scope
+            testScope = None
+            for scope in self.sym_table.table:
+                if scope.nesting_level == parameter_scope_level:
+                    testScope = scope
+
+            # Find the max offset of variables in this scope
+            if testScope:
+                max_offset = 0
+                for e in testScope.entities:
+                    if e.value == None:
+                            if e.offset > max_offset:
+                                max_offset = e.offset
+
+            if mode == 'CV':
+                finalCode.append(f"addi fp, sp, {max_offset}")
+                self.loadvr(parameter, 't0')
+                finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
+            
+            elif mode == 'REF':
+                finalCode.append(f"addi t0, sp, -{entity.offset}")
+                finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
+
+    def generateCall(self, function_name):
+        global finalCode
+
+        func, func_scope_level = self.sym_table.lookup(function_name)
+
+        current_scope_level = len(self.sym_table.table) - 1
 
         finalCode.append(f"{self.newLabel()}")
-        
-        if mode == 'CV':
-            self.loadvr(parameter, 't0')
-            finalCode.append(f"sw t0, -12(fp)")
+
+        if func_scope_level == current_scope_level:
+            finalCode.append(f"sw sp, -4(fp)")
+        else:
+            finalCode.append(f"lw t0, -4(sp)")
+            finalCode.append(f"sw t0, -4(fp)")
+
+        finalCode.append(f"addi sp, sp, {func.frame_length}")
+        finalCode.append(f"jal L1")
+        finalCode.append(f"addi sp, sp, -{func.frame_length}")
 
     # Generate new labels for final code
     def newLabel(self):
@@ -1580,9 +1677,13 @@ class CodeGenerator:
             
     def beginBlock(self):
         global finalCode
-
-        finalCode.append(f"{self.newLabel()} j Lmain")
-        finalCode.append(f"{self.newLabel()} sw ra, -0(sp)")
+        global is_first
+        if is_first:
+            # Only for the first function (in the deeper scope)
+            finalCode.append(f"{self.newLabel()} j Lmain")
+            is_first = False
+        else:
+            finalCode.append(f"{self.newLabel()} sw ra, -0(sp)")
 
     def endBlock(self):
         global finalCode
@@ -1596,6 +1697,26 @@ class CodeGenerator:
 
         finalCode.append("Lmain:")
         finalCode.append(f"{self.newLabel()}")
+
+        # Find global scope
+        global_scope = None
+        for scope in self.sym_table.table:
+            if scope.nesting_level == 0:
+                global_scope = scope
+                break
+
+        # Find the offset that we need to add to sp
+        if global_scope:
+            max_offset = 0
+            for entity in global_scope.entities:
+                if entity.value == None:
+                    if entity.offset > max_offset:
+                        max_offset = entity.offset
+
+            stack_offset = max_offset + 4
+
+        finalCode.append(f"addi sp, sp, {stack_offset}")
+        finalCode.append(f"move gp, sp")
 ### =================================================
 
 def main():
