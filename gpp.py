@@ -789,6 +789,10 @@ class Parser:
             
             expr_place = self.expression()
 
+            if expr_place == "f":
+                Quad.genQuad(':=', Quad.getLastTemp(), '_', var_name)
+                return
+
             # Generate assignment quad
             Quad.genQuad(':=', expr_place, '_', var_name)
 
@@ -1004,7 +1008,7 @@ class Parser:
     # CHANGED FOR FINAL CODE
     def call_stat(self):
         global token
-
+        
         token = self.get_token()
 
         if token.family == "id":
@@ -1018,6 +1022,32 @@ class Parser:
             self.code_generator.generateCall(func_name)
         else:
             self.error("funDec")
+
+    def assign_call_stat(self):
+        global token
+
+        if token.family != "id":
+            return
+        
+        func, func_scope = self.sym_table.lookup(token.recognized_string)
+        
+        if func != None and func.value == "function":
+            func_name = token.recognized_string
+            token = self.get_token()
+
+            self.idtail()
+
+            ret = Quad.newTemp()
+            self.sym_table.addEntity(Entity(ret))
+
+            Quad.genQuad('par', ret, 'RET', '_')
+            Quad.genQuad('call', func_name, '_', '_')
+
+            self.code_generator.generateCall(func_name)
+
+            return True
+        else:
+            return False
 
     def idtail(self):
         global token
@@ -1059,17 +1089,19 @@ class Parser:
         global token
 
         if token.recognized_string != "%":
-            # (CV)
-            expr_place = self.expression()
+            # expr_place = self.expression()
+            if token.family == "id":
+                Quad.genQuad('par', token.recognized_string, 'CV', '_')
+                self.code_generator.generateParameters(token.recognized_string, 'CV', self.param_counter)
+                self.param_counter += 1
 
-            if expr_place != None:
-                Quad.genQuad('par', expr_place, 'CV', '_')
+            # if expr_place != None:
+            #     Quad.genQuad('par', expr_place, 'CV', '_')
 
-            self.code_generator.generateParameters(expr_place, 'CV', self.param_counter)
+            # self.code_generator.generateParameters(expr_place, 'CV', self.param_counter)
 
-            self.param_counter += 1
+            token = self.get_token()
         else:
-            # (REF)
             token = self.get_token()
             if token.family != "id":
                 self.error("varName")
@@ -1082,7 +1114,7 @@ class Parser:
 
                 self.param_counter += 1
 
-                token = self.get_token()
+                token = self.get_token()   
 
     # condition() updates the token at the end
     # like sequence() and actualparlist()
@@ -1191,6 +1223,9 @@ class Parser:
     # CHANGED FOR FINAL CODE
     def expression(self):
         global token
+
+        if self.assign_call_stat():
+            return "f"
         
         # Take the first operand
         first_operand = self.term()
@@ -1289,8 +1324,9 @@ class Parser:
                 temp = Quad.newTemp()
                 self.sym_table.addEntity(Entity(temp))
                 self.idtail()
+
                 return temp
-            
+        
             return operand
 
     def relational_oper(self):
@@ -1340,6 +1376,12 @@ class Quad:
     def newTemp():
         global temp
         temp += 1
+
+        return f"t@{temp}"
+    
+    @staticmethod
+    def getLastTemp():
+        global temp
 
         return f"t@{temp}"
 
@@ -1392,10 +1434,12 @@ class Scope:
         nesting_level += 1
         self.nesting_level = nesting_level
         self.offset = 12
+        global file_output
+        file_output = ""
 
     def close(self):
         global nesting_level
-        # self.print()
+        self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1423,6 +1467,9 @@ class Scope:
             output += "\n"
 
         print(output)
+
+        global file_output
+        file_output += output
 
 class Argument:
     def __init__(self, par_mode):
@@ -1505,7 +1552,7 @@ class CodeGenerator:
         entity, variable_scope_level = self.sym_table.lookup(variable)
 
         # If we didnt find the variable in symbol table
-        if entity is None and (not variable.isdigit()): #TODO: why .isdigit() ?
+        if entity is None and (not variable.isdigit()):
             print(f"Did not find variable {variable}")
             return
         
@@ -1542,7 +1589,7 @@ class CodeGenerator:
             finalCode.append(f"lw t0, (t0)")
             finalCode.append(f"lw {destination_reg}, (t0)")
 
-    def storevr(self, destination_reg, variable):
+    def storerv(self, destination_reg, variable):
         global finalCode
 
         entity, variable_scope_level = self.sym_table.lookup(variable)
@@ -1671,7 +1718,7 @@ class CodeGenerator:
 
     # Generate new labels for final code
     def newLabel(self):
-        label = f"L{self.label_counter}:"
+        label = f"\nL{self.label_counter}:"
         self.label_counter += 1
         return label
             
@@ -1680,10 +1727,12 @@ class CodeGenerator:
         global is_first
         if is_first:
             # Only for the first function (in the deeper scope)
-            finalCode.append(f"{self.newLabel()} j Lmain")
+            finalCode.append(f"{self.newLabel()}")
+            finalCode.append("j Lmain")
             is_first = False
         else:
-            finalCode.append(f"{self.newLabel()} sw ra, -0(sp)")
+            finalCode.append(f"{self.newLabel()}")
+            finalCode.append("sw ra, -0(sp)")
 
     def endBlock(self):
         global finalCode
@@ -1727,11 +1776,14 @@ def main():
     parser.syntax_analyzer()
 
     fd = open(progName + ".int", "w", encoding="utf-8") # Encoding for greek letters
-
     for quad in interCode:
         fd.write(str(quad) + "\n")
         # print(quad)
 
+    fd.close()
+
+    fd = open(progName + ".sym", "w", encoding="utf-8") # Encoding for greek letters
+    fd.write(file_output)
     fd.close()
 
     fd = open(progName + ".asm", "w", encoding="utf-8") # Encoding for greek letters
