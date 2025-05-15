@@ -1471,13 +1471,15 @@ class CodeGenerator:
         # Move t0 down by offset
         finalCode.append(f"addi t0, t0, -{entity.offset}")
 
+    #TODO: Check pg.27 for if conds in line 1488. gp (global pointer) mentioned but not used
+    #TODO: Achually, this implementation is wrong. Stuff from pg.30 are missing
     def loadvr(self, variable, destination_reg):
         global finalCode
 
         entity, variable_scope_level = self.sym_table.lookup(variable)
 
         # If we didnt find the variable in symbol table
-        if entity is None and (not variable.isdigit()):
+        if entity is None and (not variable.isdigit()): #TODO: why .isdigit() ?
             print(f"Did not find variable {variable}")
             return
         
@@ -1491,7 +1493,9 @@ class CodeGenerator:
         elif current_scope_level == variable_scope_level and entity.par_mode == 'CV':
             finalCode.append(f"lw {destination_reg}, -{entity.offset}(sp)")
 
-    def storevr(self, destination_reg, variable):
+    #TODO: pg.36 missing
+    #TODO: Better grouping on the if conds would be nice
+    def storerv(self, destination_reg, variable):
         global finalCode
 
         entity, variable_scope_level = self.sym_table.lookup(variable)
@@ -1527,7 +1531,7 @@ class CodeGenerator:
         self.loadvr(source, 't1')
 
         # Store destination
-        self.storevr('t1', destination)
+        self.storerv('t1', destination)
 
     # For arithmetic operations
     def generateArithmetic(self, op, x, y, z):
@@ -1553,7 +1557,7 @@ class CodeGenerator:
             finalCode.append("mul t1, t1, t2")
 
         # Store result
-        self.storevr('t1', z)
+        self.storerv('t1', z)
 
     # For function parameters
     def generateParameters(self, parameter, mode):
