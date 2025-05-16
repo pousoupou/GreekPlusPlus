@@ -31,9 +31,9 @@ sw t1, -16(gp)
 
 L7:
 sw sp, -4(fp)
-addi sp, sp, 20
+addi sp, sp, 16
 jal L1
-addi sp, sp, -20
+addi sp, sp, -16
 
 L8:
 lw ra, -0(sp)
@@ -41,7 +41,7 @@ jr ra
 Lmain:
 
 L9:
-addi sp, sp, 28
+addi sp, sp, 24
 move gp, sp
 
 L10:
@@ -53,7 +53,7 @@ li t1, 4
 sw t1, -16(sp)
 
 L12:
-addi fp, sp, 24
+addi fp, sp, 20
 lw t0, -12(sp)
 sw t0, -12(fp)
 
@@ -63,12 +63,23 @@ sw t0, -16(fp)
 
 L14:
 sw sp, -4(fp)
-addi sp, sp, 24
-jal L1
-addi sp, sp, -24
+addi sp, sp, 20
+jal L5
+addi sp, sp, -20
 
 L15:
 lw t1, -16(sp)
+mv a0, t1
+li a7, 1
+ecall
 
 L16:
 lw t1, -20(sp)
+mv a0, t1
+li a7, 1
+ecall
+
+L17:
+li a0, 0
+li a7, 93
+ecall
