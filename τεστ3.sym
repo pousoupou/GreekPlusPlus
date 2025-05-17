@@ -1,0 +1,10 @@
+Scope: 1
+name: χ, par_mode: in, offset: 12, 
+name: ψ, par_mode: out, offset: 16, 
+name: t@1, offset: 20, 
+Scope: 0
+name: b, offset: 12, 
+name: c, offset: 16, 
+name: g, offset: 20, 
+name: Π1, value: function, start_quad: 2, args: ['in', 'out'], frame_length: 32, 
+name: t@2, offset: 24, 

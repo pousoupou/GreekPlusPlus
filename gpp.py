@@ -1827,6 +1827,27 @@ class CodeGenerator:
 
         self.storerv('a0', variable)
 
+    def generateRelation(self, op, x, y, target_label):
+        global finalCode
+
+        finalCode.append(self.newLabel())
+
+        self.loadvr(x, 't1')
+        self.loadvr(y, 't2')
+
+        if op == '<':
+            finalCode.append(f"blt t1, t2, L{target_label}")
+        elif op == '<=':
+            finalCode.append(f"ble t1, t2, L{target_label}")
+        elif op == '>':
+            finalCode.append(f"bgt t1, t2, L{target_label}")
+        elif op == '>=':
+            finalCode.append(f"bge t1, t2, L{target_label}")
+        elif op == '=':
+            finalCode.append(f"beq t1, t2, L{target_label}")
+        elif op == '<>':
+            finalCode.append(f"bne t1, t2, L{target_label}")
+
     def newLabel(self):
         label = f"\nL{self.label_counter}:"
         self.label_counter += 1

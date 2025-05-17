@@ -1,9 +1,10 @@
-Scope: 1
-name: α, par_mode: in, offset: 12, 
-name: β, par_mode: out, offset: 16, 
-name: t@1, offset: 20, 
 Scope: 0
-name: χ, offset: 12, 
-name: ψ, offset: 16, 
-name: γ, offset: 20, 
-name: αύξηση, value: function, start_quad: 2, args: ['in', 'out'], frame_length: 28, 
+name: α, offset: 12, 
+name: β, offset: 16, 
+name: ι, offset: 20, 
+name: τ, offset: 24, 
+name: π, offset: 28, 
+name: t@1, offset: 32, 
+name: t@2, offset: 36, 
+name: t@3, offset: 40, 
+name: t@4, offset: 44, 
