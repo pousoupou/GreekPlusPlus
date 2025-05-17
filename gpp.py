@@ -304,6 +304,7 @@ class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.sym_table = SymbolTable()
+        self.last_relational_expr = None # FOR FINAL CODE OF IFSTAT
         self.code_generator = CodeGenerator(self.sym_table)
 
     def error(self, case):
@@ -821,25 +822,35 @@ class Parser:
             self.error("assign")
 
     #CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def if_stat(self):
         global token
         token = self.get_token()
-        
+
         # Evaluate the condition
         trueList, falseList = self.condition()
 
         # Backpatch true jumps to then-block
-        Quad.backPatch(trueList, Quad.nextQuad())
+        then_label = Quad.nextQuad()
+        Quad.backPatch(trueList, then_label)
+
+        if self.last_relational_expr is not None:
+            rel_op, left_expr, right_expr = self.last_relational_expr
+            self.code_generator.generateRelation(rel_op, left_expr, right_expr, then_label)
+            self.last_relational_expr = None
+
 
         if token.recognized_string == "τότε":
             token = self.get_token()
-            
+
             # Process the then-block
             self.sequence()
             
             # Create jump to skip else-block (will be backpatched to end of if)
             after_then_jump = Quad.makeList(Quad.nextQuad())
             Quad.genQuad('jump', '_', '_', '_')
+
+            self.code_generator.generateJump(Quad.nextQuad())
             
             # Backpatch false jumps to else-block
             else_label = Quad.nextQuad()
@@ -1197,6 +1208,7 @@ class Parser:
         return (trueList, falseList)
 
     # CHANGED FOR INTERMEDIATE CODE
+    # CHANGED FOR FINAL CODE
     def boolfactor(self):
         global token
 
@@ -1238,12 +1250,15 @@ class Parser:
             right_expr = self.expression()
 
             #Generate the quad for relational operation
-            trueList = Quad.makeList(Quad.nextQuad())
+            true_label = Quad.nextQuad()
+            trueList = Quad.makeList(true_label)
             Quad.genQuad(rel_op, left_expr, right_expr, '_')
 
             # Create false list for the jump after the expression
             falseList = Quad.makeList(Quad.nextQuad())
             Quad.genQuad('jump', '_', '_', '_')
+
+            self.last_relational_expr = (rel_op, left_expr, right_expr)
 
             return (trueList, falseList)
 
@@ -1468,7 +1483,7 @@ class Scope:
 
     def close(self):
         global nesting_level
-        self.print()
+        # self.print()
         nesting_level -= 1
 
     def print(self):
@@ -1738,12 +1753,12 @@ class CodeGenerator:
                 else:
                     # If variable is local or CV parameter in its scope
                     if entity.par_mode is None or entity.par_mode == 'in':
-                        self.gnlvcode(entity)
+                        self.gnlvcode(parameter)
                         finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
 
                     # If variable is REF parameter in its scope
                     elif entity.par_mode == 'out':
-                        self.gnlvcode(entity)
+                        self.gnlvcode(parameter)
                         finalCode.append(f"lw t0, (t0)")
                         finalCode.append(f"sw t0, -{12 + (4 * counter)}(fp)")
 
@@ -1827,7 +1842,13 @@ class CodeGenerator:
 
         self.storerv('a0', variable)
 
-    def generateRelation(self, op, x, y, target_label):
+    def generateJump(self, label):
+        global finalCode
+
+        finalCode.append(self.newLabel())
+        finalCode.append(f"j L{label}")
+
+    def generateRelation(self, op, x, y, then_label):
         global finalCode
 
         finalCode.append(self.newLabel())
@@ -1836,17 +1857,17 @@ class CodeGenerator:
         self.loadvr(y, 't2')
 
         if op == '<':
-            finalCode.append(f"blt t1, t2, L{target_label}")
+            finalCode.append(f"blt t1, t2, L{then_label}")
         elif op == '<=':
-            finalCode.append(f"ble t1, t2, L{target_label}")
+            finalCode.append(f"ble t1, t2, L{then_label}")
         elif op == '>':
-            finalCode.append(f"bgt t1, t2, L{target_label}")
+            finalCode.append(f"bgt t1, t2, L{then_label}")
         elif op == '>=':
-            finalCode.append(f"bge t1, t2, L{target_label}")
+            finalCode.append(f"bge t1, t2, L{then_label}")
         elif op == '=':
-            finalCode.append(f"beq t1, t2, L{target_label}")
+            finalCode.append(f"beq t1, t2, L{then_label}")
         elif op == '<>':
-            finalCode.append(f"bne t1, t2, L{target_label}")
+            finalCode.append(f"bne t1, t2, L{then_label}")
 
     def newLabel(self):
         label = f"\nL{self.label_counter}:"
