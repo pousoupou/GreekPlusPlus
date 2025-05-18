@@ -837,6 +837,7 @@ class Parser:
         if self.last_relational_expr is not None:
             rel_op, left_expr, right_expr = self.last_relational_expr
             self.code_generator.generateRelation(rel_op, left_expr, right_expr, then_label)
+            emptyFalseJump = self.code_generator.generateEmptyJump()
             self.last_relational_expr = None
 
 
@@ -849,12 +850,12 @@ class Parser:
             # Create jump to skip else-block (will be backpatched to end of if)
             after_then_jump = Quad.makeList(Quad.nextQuad())
             Quad.genQuad('jump', '_', '_', '_')
+            emptyTrueJump = self.code_generator.generateEmptyJump()
 
-            self.code_generator.generateJump(Quad.nextQuad())
-            
             # Backpatch false jumps to else-block
             else_label = Quad.nextQuad()
             Quad.backPatch(falseList, else_label)
+            self.code_generator.patchJump(emptyFalseJump, else_label)
 
             # Process the else-block statements
             self.elsepart()
@@ -862,6 +863,7 @@ class Parser:
             # Backpatch jumps after then-block to end of if
             end_label = Quad.nextQuad()
             Quad.backPatch(after_then_jump, end_label)
+            self.code_generator.patchJump(emptyTrueJump, end_label)
 
             if token.recognized_string != "εάν_τέλος":
                 self.error("if-end")
@@ -1255,7 +1257,8 @@ class Parser:
             Quad.genQuad(rel_op, left_expr, right_expr, '_')
 
             # Create false list for the jump after the expression
-            falseList = Quad.makeList(Quad.nextQuad())
+            false_label = Quad.nextQuad()
+            falseList = Quad.makeList(false_label)
             Quad.genQuad('jump', '_', '_', '_')
 
             self.last_relational_expr = (rel_op, left_expr, right_expr)
@@ -1847,6 +1850,19 @@ class CodeGenerator:
 
         finalCode.append(self.newLabel())
         finalCode.append(f"j L{label}")
+
+    def generateEmptyJump(self):
+        global finalCode
+
+        finalCode.append(self.newLabel())
+        finalCode.append(f"j L")
+
+        return len(finalCode) - 1
+    
+    def patchJump(self, jump, label):
+        global finalCode
+
+        finalCode[jump] += f"{label}"
 
     def generateRelation(self, op, x, y, then_label):
         global finalCode
