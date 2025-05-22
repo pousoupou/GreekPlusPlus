@@ -1513,7 +1513,7 @@ class Scope:
             
             output += "\n"
 
-        print(output)
+        # print(output)
 
         global file_output
         file_output += output
